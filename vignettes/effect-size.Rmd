@@ -1,0 +1,21 @@
+---
+title: "Effect size for paired binary outcomes: Cohen's g"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Effect size for paired binary outcomes: Cohen's g}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r}
+library(mcnemarControl)
+
+dat <- mcnemar_example_long(seed = 3)
+trts <- c("TrtA", "TrtB", "TrtC")
+fit <- mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, ci = 0.95)
+summary(fit)
+```

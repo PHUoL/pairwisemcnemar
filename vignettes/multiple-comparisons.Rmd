@@ -1,0 +1,23 @@
+---
+title: "Multiple comparisons: Holm vs BH vs Hochberg"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multiple comparisons: Holm vs BH vs Hochberg}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r}
+library(mcnemarControl)
+
+dat <- mcnemar_example_long(seed = 2)
+trts <- c("TrtA", "TrtB", "TrtC")
+
+summary(mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, p_adjust = "holm"))
+summary(mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, p_adjust = "BH"))
+summary(mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, p_adjust = "hochberg"))
+```

@@ -1,0 +1,25 @@
+---
+title: "McNemar methods: asymptotic, continuity correction, and mid-P"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{McNemar methods: asymptotic, continuity correction, and mid-P}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r}
+library(mcnemarControl)
+
+dat <- mcnemar_example_long(seed = 1)
+
+# Explicit treatments to ensure robust vignette builds
+trts <- c("TrtA", "TrtB", "TrtC")
+
+mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts)
+mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, method = "cc")
+mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, method = "midp")
+```
