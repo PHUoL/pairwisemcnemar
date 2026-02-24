@@ -149,7 +149,7 @@ mcnemar_control <- function(data,
     }
     if (method == "midp") {
       res <- contingencytables::McNemar_midP_test_paired_2x2(tab)
-      return(list(Z = NA_real_, P = NA_real_, midP = res$P, discordant = disc))
+      return(list(Z = NA_real_, P = NA_real_, midP = res$midP, discordant = disc))
     }
     stop("Unknown method.")
   }
@@ -170,11 +170,14 @@ mcnemar_control <- function(data,
       x <- x[keep]; y <- y[keep]
     }
 
-    tab <- build_table(x, y, outcome_levels)
+    tab  <- build_table(x, y, outcome_levels)
     test <- run_mcnemar(tab, method)
+    
     p_raw <- if (method == "midp") test$midP else test$P
+    if (is.null(p_raw) || length(p_raw) == 0L) p_raw <- NA_real_
+    
     g <- run_g(tab, ci)
-
+    
     rows[[length(rows) + 1L]] <- tibble::tibble(
       control = control,
       treatment = trt,
