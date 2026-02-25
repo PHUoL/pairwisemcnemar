@@ -1,5 +1,7 @@
 # mcnemarControl
 
+[![R-CMD-check](https://github.com/PHUoL/pairwisemcnemar/actions/workflows/R-CMD-check.yaml/badge.svg?branch=main)](https://github.com/PHUoL/pairwisemcnemar/actions/workflows/R-CMD-check.yaml)
+
 Control-vs-treatment McNemar tests from long-format paired binary data.
 
 ## Quick start
