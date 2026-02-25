@@ -9,7 +9,6 @@ on:
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
-
     name: ${{ matrix.config.os }} (R ${{ matrix.config.r }})
 
     strategy:
@@ -25,7 +24,7 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      _R_CHECK_SYSTEM_CLOCK_: 0
+      _R_CHECK_SYSTEM_CLOCK_: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -46,4 +45,4 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          error-on: 'error'
+          error-on: '"error"'
