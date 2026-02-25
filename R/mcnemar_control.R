@@ -4,17 +4,21 @@
 #' Runs paired 2x2 McNemar tests comparing a *control* condition with one or more
 #' *treatment* conditions from **long-format** data.
 #'
-#'#' @details
+#' @details
 #' **Interpreting the McNemar test statistic (`Z`) across methods:**
-#' For `method = "asymptotic"`, the McNemar statistic is signed (it can be negative or positive)
-#' because it is computed from the difference of discordant counts (proportional to `b - c`).
-#' For `method = "cc"`, the continuity-corrected statistic returned by
-#' `contingencytables::McNemar_asymptotic_test_CC_paired_2x2()` uses `abs(b - c)` and therefore
+#' For `method = "asymptotic"`, `Z` is signed (negative or positive) because it is computed
+#' from the difference of discordant counts (proportional to `b - c`).
+#' For `method = "cc"`, the continuity-corrected statistic uses `abs(b - c)` and therefore
 #' returns a non-negative `Z`, which should be interpreted as a magnitude-only statistic.
-#' In both cases, the default p-value is two-sided and is computed from `abs(Z)`, so the sign of
-#'  `Z` does not affect the p-value. [1](https://forum.posit.co/t/github-actions-
-#'  setup-r-dependencies-fails-with-remote-dependency-in-subdirectory/138302)
-#'  [2](https://usethis.r-lib.org/reference/use_github_action.htm
+#' In both cases, the default p-value is two-sided and depends on `abs(Z)`, so the sign of
+#' `Z` does not affect the p-value.
+#' 
+#' @references
+#' Fagerland MW, Lydersen S, Laake P (2017). *Statistical Analysis of Contingency Tables*.
+#' Chapman & Hall/CRC.
+#' 
+#' See also \code{\link[contingencytables]{McNemar_asymptotic_test_paired_2x2}} and
+#' \code{\link[contingencytables]{McNemar_asymptotic_test_CC_paired_2x2}}.
 #'
 #' @param data A data frame in long format.
 #' @param id Name of the subject identifier column (character).

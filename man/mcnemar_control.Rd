@@ -51,10 +51,26 @@ An object of class \code{"mcnemarControl"} with elements \code{results} and \cod
 Runs paired 2x2 McNemar tests comparing a \emph{control} condition with one or more
 \emph{treatment} conditions from \strong{long-format} data.
 }
+\details{
+\strong{Interpreting the McNemar test statistic (\code{Z}) across methods:}
+For \code{method = "asymptotic"}, \code{Z} is signed (negative or positive) because it is computed
+from the difference of discordant counts (proportional to \code{b - c}).
+For \code{method = "cc"}, the continuity-corrected statistic uses \code{abs(b - c)} and therefore
+returns a non-negative \code{Z}, which should be interpreted as a magnitude-only statistic.
+In both cases, the default p-value is two-sided and depends on \code{abs(Z)}, so the sign of
+\code{Z} does not affect the p-value.
+}
 \examples{
 dat <- mcnemar_example_long(seed = 1)
 fit <- mcnemar_control(dat, id = "id", condition = "condition", outcome = "outcome",
                        control = "Control")
 summary(fit)
 
+}
+\references{
+Fagerland MW, Lydersen S, Laake P (2017). \emph{Statistical Analysis of Contingency Tables}.
+Chapman & Hall/CRC.
+
+See also \code{\link[contingencytables]{McNemar_asymptotic_test_paired_2x2}} and
+\code{\link[contingencytables]{McNemar_asymptotic_test_CC_paired_2x2}}.
 }

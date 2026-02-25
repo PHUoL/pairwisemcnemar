@@ -11,6 +11,17 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
+
+### Interpreting the McNemar Z statistic across methods
+
+In `mcnemar_control()`, the reported McNemar statistic `Z` comes from the underlying
+**contingencytables** functions. For `method = "asymptotic"`, `Z` is signed and can be
+negative or positive because it is computed from the difference of discordant counts
+(e.g., proportional to \(b - c\)). For `method = "cc"`, the continuity-corrected statistic
+uses \(|b - c|\) (so the returned `Z` is non-negative) and should be interpreted as a
+magnitude-only statistic. In both cases, the default p-value is two-sided and is computed
+from \(|Z|\), so the sign does not affect the p-value.
+
 ```{r}
 library(mcnemarControl)
 
