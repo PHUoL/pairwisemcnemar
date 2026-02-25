@@ -1,42 +1,55 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
 
 # mcnemarControl
 
 [![R-CMD-check](https://github.com/PHUoL/pairwisemcnemar/actions/workflows/R-CMD-check.yaml/badge.svg?branch=main)](https://github.com/PHUoL/pairwisemcnemar/actions/workflows/R-CMD-check.yaml)
 
-The goal of this package is to allow for multiple uses of McNemar test
-in a single test where a control is compared against one or more
-treatment conditions.
+
+The goal of this package is to allow for multiple uses of McNemar test in a single test where a control is compared against one or more treatment conditions. 
+
 
 ## Installation
 
-You can install the development version of mcnemarControl from
-[GitHub](https://github.com/) with:
+You can install the development version of mcnemarControl from [GitHub](https://github.com/) with:
 
-``` r
+```{r, eval=FALSE}
 install.packages("remotes")
 remotes::install_github("PHUoL/pairwisemcnemar")
 ```
 
+
 ## Example
 
-``` r
+
+```{r , eval=FALSE}
 ## basic example code
 library(mcnemarControl)
+
 ```
 
-You need to first create the data frame, as shown in the example below.
-You can also import a data. Data must be fornatted in long format.
+You need to first create the data frame, as shown in the example below. You can also import a data. Data must be fornatted in long format.
 
-``` r
+```{r , eval=FALSE}
 dat <- mcnemar_example_long(seed = 2)
 trts <- c("TrtA", "TrtB", "TrtC")
 ```
 
 You can pro
 
-``` r
+```{r , eval=FALSE}
 #
 fit <- mcnemar_control(dat2, id = "id", condition = "condition", outcome = "outcome",
                        control = "Control", method="asymptotic",p_adjust="holm", ci=0.95)
@@ -59,3 +72,5 @@ fit
 #
 summary(fit)
 ```
+
+
