@@ -237,11 +237,11 @@ The first two steps are the same as for the procedure on the original *g* scale 
 
     using a finite bootstrap replicates only. Treatments are considered usable and are retained for $\text{max}-|t|$ calibration only if:
 
-    -   the observed treatment $\eta_{j}^{*}$ is **not degenerate**,
+    - the observed treatment $\eta_{j}^{*}$ is **not degenerate**,
 
-    -   the bootstrap $\hat{\text{SE}_{n,j}}$ is finite,
+    - the bootstrap $\hat{\text{SE}_{n,j}}$ is finite,
 
-    -   and the bootstrap $\hat{\text{SE}_{n,j}} > 0$.
+    - and the bootstrap $\hat{\text{SE}_{n,j}} > 0$.
 
 7.  Build the $\text{max}-|t|$ bootstrap statistics
 

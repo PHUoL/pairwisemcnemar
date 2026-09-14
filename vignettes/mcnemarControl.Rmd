@@ -26,10 +26,10 @@ comparisons.
 
 Your input data must be in **long format** with at least:
 
--   an `ID` column identifying paired observations (e.g., subject),
--   a `condition` column containing the control and one or more
-    treatments,
--   a `binary` outcome column.
+- an `ID` column identifying paired observations (e.g., subject),
+- a `condition` column containing the control and one or more
+  treatments,
+- a `binary` outcome column.
 
 For each `id`, there must be **at most one row per condition**; if you
 have duplicates (multiple rows per `id`–`condition`), you must aggregate
@@ -55,10 +55,10 @@ to create a 2x2 contingency table (this is `tab` in the function). This
 is built for each control–treatment pair from the paired outcomes for
 the same subjects (`id`). The key idea is:
 
--   Rows = the control outcomes (`x`)
--   Columns = the treatment outcomes (`y`)
--   The row/column order is determined by outcome_levels (either
-    supplied by you, or inferred)
+- Rows = the control outcomes (`x`)
+- Columns = the treatment outcomes (`y`)
+- The row/column order is determined by outcome_levels (either supplied
+  by you, or inferred)
 
 The order of the outcome levels determines what is contained in each
 cell of the contingency table. By default the outcome_levels =
@@ -91,9 +91,9 @@ summary(fit)
 
 `mcnemar_control()` supports three methods:
 
--   `"asymptotic"`: the standard asymptotic McNemar test,
--   `"cc"`: asymptotic McNemar test with continuity correction,
--   `"midp"`: McNemar mid-P approach.
+- `"asymptotic"`: the standard asymptotic McNemar test,
+- `"cc"`: asymptotic McNemar test with continuity correction,
+- `"midp"`: McNemar mid-P approach.
 
 > Note: `midp` does not return a Z statistic (it is reported as `NA`),
 > but it returns p-values.
@@ -108,8 +108,8 @@ Z = \frac{b-c}{\sqrt{(b + c)}}
 $$ The test statistic `Z` can be negative or positive (Signed),
 depending on whether $b < c$ \< or $b > c$.
 
--   If $b < c$, then $b−c < 0 ⇒ Z < 0$
--   If $b >c$\`, then $b−c > 0 ⇒ Z > 0$
+- If $b < c$, then $b−c < 0 ⇒ Z < 0$
+- If $b >c$\`, then $b−c > 0 ⇒ Z > 0$
 
 For the asymptotic method, the sign of `Z` reflects the direction of the
 imbalance between discordant cells `b` and `c` (given your chosen
@@ -159,9 +159,9 @@ summary(fit_midp)
 By default, `mcnemar_control()` uses **Holm** adjustment for family-wise
 error rate control. You can switch to:
 
--   `"BH"` for false discovery rate control,
--   `"hochberg"` for family-wise error rate control under certain
-    dependence assumptions
+- `"BH"` for false discovery rate control,
+- `"hochberg"` for family-wise error rate control under certain
+  dependence assumptions
 
 ```{r}
 fit_holm <- mcnemar_control(
@@ -234,11 +234,11 @@ does not affect the p-value.
 
 ### (1) `Z` sign conventions: asymptotic vs cc
 
--   With `method = "asymptotic"`, the reported `Z` can be **negative or
-    positive** (signed statistic).
--   With `method = "cc"`, the reported `Z` is **non-negative**
-    (magnitude-only) because the continuity-corrected form uses an
-    absolute difference internally.
+- With `method = "asymptotic"`, the reported `Z` can be **negative or
+  positive** (signed statistic).
+- With `method = "cc"`, the reported `Z` is **non-negative**
+  (magnitude-only) because the continuity-corrected form uses an
+  absolute difference internally.
 
 This is expected and does not indicate an error; two-sided p-values
 depend on `abs(Z)`.

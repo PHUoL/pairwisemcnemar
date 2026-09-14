@@ -21,6 +21,8 @@ export(mcnemar_power_summary)
 export(mcnemar_table)
 export(mcnemar_table_summary)
 importFrom(rlang,.data)
-importFrom(stats,dbinom)
-importFrom(stats,p.adjust)
-importFrom(stats,pbinom)
+importFrom(stats,
+  dbinom,
+  p.adjust,
+  pbinom
+)
