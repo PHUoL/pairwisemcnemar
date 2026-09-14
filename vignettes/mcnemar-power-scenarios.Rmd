@@ -1,0 +1,369 @@
+---
+title: "Understanding Scenario Settings in summary.mcnemarPower()"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Understanding Scenario Settings in summary.mcnemarPower()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Overview {#sec-overview}
+
+The `summary.mcnemarPower()` function extends the output of `mcnemar_power()` by estimating multiplicity-adjusted power under one or more simulation scenarios. These scenarios are designed to explore how adjusted power may change under different assumptions about dependence among repeated outcomes and, for the fixed-order case, condition order effects. They are not direct repeated-binary model fits; instead, they are simulation-based settings that help users assess how sensitive their power conclusions are to these assumptions.
+
+The example data in this package’s is a long-format example `dat`
+
+```{r}
+# load package
+library(mcnemarControl)
+```
+
+In the current implementation, the valid scenarios are:
+
+- `"indep"` treats the control-versus-treatment McNemar comparisons as independent. For each treatment, discordant counts are simulated from the estimated paired-binomial model without adding subject-level dependence across treatments.
+- `"dep_rand"` represents a repeated-measures setting in which outcomes from the same subject are dependent, but condition order is randomized or counterbalanced. The simulation uses a shared subject-level random effect to induce dependence and samples the condition sequence from the observed subject-level order structure in the supplied long-format data.
+- `"dep_fixed"` represents a repeated-measures setting in which the control is presented first and the treatments follow a fixed sequence. The simulation uses a shared subject-level random effect to induce dependence and adds a position-specific order_effect across the fixed order.
+
+The current implementation of `summary.mcnemarPower()` uses the following defaults:
+
+- `scenarios = c("indep", "dep_rand", "dep_fixed")`
+- `alpha = NULL` (which defaults internally to `object$settings$alpha`)
+- `nsim = 2000`
+- `rho = 0.30`
+- `order_effect = 0.25`
+- `fixed_order = NULL`
+- `targets = c(0.80, 0.90)`
+- `power_types = c("individual", "any_subset", "all_subset", "all_treatments")`
+- `individual_treatment = NULL`
+- `sim_fun = NULL`
+- `parallel = FALSE`
+- `n_cores = 1L`
+- `seed = NULL`
+- `n_max = 1000L`
+- `digits = 4`
+
+If `comparisons` is not supplied, it defaults to all fitted treatments. If `individual_treatment` is not supplied, the current implementation sets it to the values in `comparisons`.
+
+## Why `"dep_rand"` and `"dep_fixed"` are sensitivity analyses
+
+The `"dep_rand"` and `"dep_fixed"` scenarios are **sensitivity analyses**. This means they do not attempt to estimate a repeated-binary model directly from the observed data. Instead, they examine how the multiplicity-adjusted power results may change when additional assumptions are introduced about dependence among repeated outcomes from the same subject and, where relevant, about the order in which conditions are presented.
+
+In `"dep_rand"`, the analysis assumes that outcomes measured on the same subject are correlated, but that the condition order is randomised or counterbalanced. In `"dep_fixed"`, the analysis assumes both within-subject dependence and a fixed presentation order, so that later conditions may differ systematically from earlier ones through the `order_effect` parameter. These scenarios therefore provide a simulation-based assessment of robustness: they show whether the power conclusions remain similar, become weaker, or become stronger when plausible dependence and order structures are imposed.
+
+Because these scenarios are not fitted repeated-binary models, they should not be interpreted as direct estimates of period effects, sequence effects, carry-over, or subject-level random effects from the observed study. Their role is instead to help users judge how sensitive the power calculations are to assumptions about the repeated-measures structure of the data.
+
+# Scenario definitions
+
+## Scenario 1: All comparisons between treatment and control are independent
+
+The `"indep"` scenario treats the control-versus-treatment McNemar comparisons as independent. For each treatment, discordant counts are simulated directly from the estimated paired-binomial / trinomial model using the fitted `pb_hat`, `pc_hat`, and `n`, without introducing subject-level dependence across treatments, as it **does not use** `rho`, `order_effect`, or `fixed_order`. In the current code, this is implemented through `.sim_one_replicate_indep_mcnemar_power()`.
+
+### Relevant defaults for `"indep"`
+
+- `alpha = object$settings$alpha` if not supplied
+- `nsim = 2000`
+- `targets = c(0.80, 0.90)`
+- `power_types = c("individual", "any_subset", "all_subset", "all_treatments")`
+- `individual_treatment = comparisons` if not supplied
+- `parallel = FALSE`
+- `seed = NULL`
+- `n_max = 1000L` for the scenario-based sample-size search
+
+### Not used in `"indep"`
+
+- `rho` is ignored in this scenario.
+- `order_effect` is ignored in this scenario.
+- `fixed_order` is ignored in this scenario.
+
+```{r eval=FALSE, include=FALSE}
+sum_indep <- summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "indep",
+  nsim = 500,
+  seed = 123
+)
+```
+
+## Scenario 2: Treatments are randomised or counterbalanced.
+
+The `"dep_rand"` scenario represents a repeated-measures setting in which outcomes from the same subject are dependent, but condition order is assumed to be randomised or counterbalanced. In the current implementation, this scenario uses a shared subject-level random effect to induce correlation among the repeated outcomes and samples condition sequences from the observed subject-level order structure in the supplied long-format data.
+
+### Parameters that matter for `"dep_rand"`
+
+For `"dep_rand"`, the key scenario-specific parameter is:
+
+- `rho = 0.30` (default for moderate dependence)
+
+### Other Relevant defaults for `"dep_rand"`
+
+- `order_effect = 0.25`
+
+- `fixed_order = NULL`, which means the function uses the **modal observed sequence** from the data if one is available; otherwise it falls back to `c(control, treatments)`.
+
+- `alpha = object$settings$alpha` if not supplied
+
+- `nsim = 2000`
+
+- `targets = c(0.80, 0.90)`
+
+- `power_types = c("individual", "any_subset", "all_subset", "all_treatments")`
+
+- `individual_treatment = comparisons` if not supplied
+
+- `parallel = FALSE`
+
+- `seed = NULL`
+
+- `n_max = 1000L` for the scenario-based sample-size search
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_rand",
+  rho = 0.30,
+  order_effect = 0.25,
+  nsim = 500,
+  seed = 123
+)
+```
+
+In the code, `rho` determines the strength of the subject-level random effect through:
+
+$$
+\sigma_{u}=\sqrt{\frac{\rho}{1-\rho}}
+$$
+
+so larger values of `rho` produce stronger within-subject dependence across repeated conditions. The `"dep_rand"` scenario does **not** use `order_effect` or `fixed_order`, because it does not impose a fixed sequence with systematic position effects. Instead, it samples the sequence structure from the observed long-format data through `order_info`.
+
+### Suggested alternative values for `rho`
+
+#### Option 1: Weaker dependence
+
+A value such as `rho = 0.10` is useful when you want a **mild dependence** scenario. This is appropriate when repeated outcomes are expected to be correlated, but only weakly. This is useful if you want to see whether your adjusted power conclusions remain similar to the independence case when dependence is only modest.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_rand",
+  rho = 0.10,
+  order_effect = 0.25,
+  nsim = 500,
+  seed = 123
+)
+```
+
+#### Option 2: Stronger dependence
+
+A value such as `rho = 0.50` is useful when you want to test a **stronger within-subject dependence** scenario. This may be appropriate when you suspect that subjects tend to be consistently high or low responders across all conditions, which would increase positive dependence among the repeated outcomes. A higher `rho` can materially change multiplicity-adjusted power, so it is useful in a sensitivity range.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_rand",
+  rho = 0.50,
+  order_effect = 0.25,
+  nsim = 500,
+  seed = 123
+)
+```
+
+#### Option 3: Very stronger dependence (sensitivity only)
+
+This is a more extreme choice and is best used as a **stress test**, not as a routine default. It can help answer “how bad could the change in power be if repeated outcomes are very strongly coupled within subjects?” but may be unrealistic for many studies.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_rand",
+  rho = 0.70,
+  order_effect = 0.25,
+  nsim = 500,
+  seed = 123
+)
+```
+
+## Scenario 3: Treatments are in a fixed-order
+
+The `"dep_fixed"` scenario represents a repeated-measures setting in which the control is presented first and the treatments follow a **fixed order**. In the current implementation, this scenario uses both:
+
+1.  a shared subject-level random effect to induce within-subject dependence, and
+
+2.  a position-specific `order_effect` across the fixed sequence.
+
+### Parameters that matter for `"dep_fixed"`
+
+For `"dep_fixed"`, the key scenario-specific parameters are:
+
+- `rho = 0.30`
+- `order_effect = 0.25`
+- `fixed_order = NULL`
+
+If `fixed_order = NULL`, the function uses the **modal observed sequence** extracted from the long-format data, and if no modal sequence is available it falls back to `c(control, treatments)`.
+
+### Suggested alternative values for `rho`
+
+The same logic as `"dep_rand"` applies here:
+
+- `rho = 0.10` for weak within-subject dependence
+- `rho = 0.50` for stronger within-subject dependence
+- `rho = 0.70` for stress-test level dependence
+
+Use non-default `rho` values in `"dep_fixed"` when you want to examine whether conclusions are sensitive to the degree of same-subject dependence in addition to the fixed-order effect.
+
+### Suggested alternative values for `order_effect`
+
+`order_effect` is added on the latent logit scale according to each condition’s position in fixed_order, so later positions receive larger (or smaller, if negative) shifts.
+
+#### Option 1: Fixed order but no extra position trend
+
+Setting `order_effect = 0` is a useful alternative when you want to model the fact that the study used a **fixed sequence**, but you do **not** want to add an extra systematic learning or fatigue trend across positions. ie. no additional systematic position trend. In other words, the sequence is fixed, but later conditions are not assumed to be better or worse just because they occur later.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.25,
+  order_effect = 0,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+This is often the most natural first alternative to the default `order_effect = 0.25` if you want the analysis to reflect only the fact that the order is fixed, without adding an extra order-bias assumption
+
+#### Option 2: Stronger positive order trend
+
+A larger positive value such as `order_effect = 0.50` is useful when you want to represent a stronger **practice**, **adaptation**, or **improvement-with-position** effect. Hence, this might be appropriate as a sensitivity scenario if you suspect practice effects or adaptation over repeated presentations. Under this assumption, later conditions systematically pushed upward on the latent logit scale relative to earlier ones. i.e. look better than earlier conditions. This might be appropriate as a sensitivity scenario if you suspect practice effects or adaptation over repeated presentations.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.25,
+  order_effect = 0.50,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+#### Option 3: Negative order trend
+
+A negative value such as `order_effect = -0.25` is useful when you want to represent **fatigue**, **boredom**, or deterioration over time, so that later conditions are systematically worse than earlier ones.
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.25,
+  order_effect = -0.25,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+#### Option 4: Stronger within-subject dependence as well
+
+Instead of the default `rho = 0.30` use `rho = 0.50` with `order_effect = 0.25` when you want to examine a more demanding fixed-order scenario in which repeated outcomes are more strongly dependent **and** a modest positive position effect is present. It is a reasonable stress-test if you are concerned that a fixed sequence may amplify apparent treatment differences.
+
+```{r eval=FALSE, include=FALSE}
+sum_dep_fixed_stronger <- summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.50,
+  order_effect = 0.25,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+#### Option 5: Stronger dependence, no extra order trend
+
+Use this if you want to isolate the effect of stronger within-subject dependence without also strengthening the positional effect:
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.50,
+  order_effect = 0,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+This keeps the order fixed but removes the extra systematic position effect, so any change relative to the default is driven mainly by stronger subject-level dependence. Using `order_effect = 0` means that later positions are not systematically advantaged or disadvantaged beyond the fixed sequence itself.
+
+#### Option 6: Stronger dependence, stronger order trend
+
+Use this if you want a more aggressive stress test:
+
+```{r eval=FALSE, include=FALSE}
+summary(
+  fit_pow,
+  data = dat,
+  comparisons = c("TrtA", "TrtB"),
+  scenarios = "dep_fixed",
+  rho = 0.50,
+  order_effect = 0.50,
+  fixed_order = c("Control", "TrtA", "TrtB", "TrtC"),
+  nsim = 500,
+  seed = 123
+)
+```
+
+This tests a scenario where there is both stronger within-subject dependence and a stronger positive fixed-order effect. Increasing `order_effect` means later conditions get a larger positive shift by position in the fixed sequence.
+
+#### Why use non-default order_effect values?
+
+Because `"dep_fixed"` is intended to show how power changes under assumptions about fixed order and position effects. The code does not estimate the order trend from the observed data; it imposes it through simulation. So changing order_effect lets you ask:
+
+- What if fixed order matters but there is no extra trend? ($0$)
+- What if later positions become systematically better? ($> 0$)
+- What if later positions become systematically worse? ($< 0$)
+
+### Suggested alternative values for `fixed_order`
+
+#### `fixed_order = NULL` (default)
+
+This uses the **modal observed sequence** extracted from the long-format data, and if no modal sequence is available it falls back to `c(control, treatments)`.
+
+Use an explicit `fixed_order` when:
+
+- you want the summary to reflect the **actual study design sequence** rather than relying on automatic extraction;
+
+- the data contain more than one observed sequence but you want to evaluate a specific fixed sequence as a hypothetical design;
+
+- or you want the analysis to be completely transparent and reproducible in reporting.
+
+#### Why use an explicit `fixed_order`?
+
+Because `"dep_fixed"` is all about a fixed presentation sequence. If the study truly imposed one order, specifying it explicitly is often clearer than leaving the function to infer it. The code already supports this directly via the `fixed_order` argument.

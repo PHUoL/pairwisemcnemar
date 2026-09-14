@@ -1,0 +1,282 @@
+---
+title: "Introduction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Get Started}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+`mcnemarControl` provides a control-vs-treatment McNemar test
+comparisons.
+
+## Data requirements
+
+Your input data must be in **long format** with at least:
+
+-   an `ID` column identifying paired observations (e.g., subject),
+-   a `condition` column containing the control and one or more
+    treatments,
+-   a `binary` outcome column.
+
+For each `id`, there must be **at most one row per condition**; if you
+have duplicates (multiple rows per `id`–`condition`), you must aggregate
+or resolve them before analysis.
+
+In the implementation used by `mcnemar_control()`, data are reshaped to
+wide format (one row per `id`) and then paired outcomes are compared
+between control and each treatment.
+
+> Practical tip: explicitly set `outcome_levels` (see Interpretation
+> notes) to avoid ambiguity in directionality.
+
+## Basic example
+
+The example data in this package’s is a long-format example `dat`
+
+```{r setup}
+library(mcnemarControl)
+```
+
+The `mcnemar_control()` function uses the long formatted table in `dat`
+to create a 2x2 contingency table (this is `tab` in the function). This
+is built for each control–treatment pair from the paired outcomes for
+the same subjects (`id`). The key idea is:
+
+-   Rows = the control outcomes (`x`)
+-   Columns = the treatment outcomes (`y`)
+-   The row/column order is determined by outcome_levels (either
+    supplied by you, or inferred)
+
+The order of the outcome levels determines what is contained in each
+cell of the contingency table. By default the outcome_levels =
+c("No","Yes"). This then allows the part of the function `run_mcmenar()`
+to calculate the number of discordant values (i.e. `b+c` from the
+contigency table)
+
+```{r}
+dat <- mcnemar_example_long(n = 40, seed = 1)
+
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control"
+)
+fit
+```
+
+The output includes a results table (one row per treatment comparison)
+and the analysis settings used.
+
+```{r}
+
+summary(fit)
+```
+
+## Choose method (asymptotic / cc / midp)
+
+`mcnemar_control()` supports three methods:
+
+-   `"asymptotic"`: the standard asymptotic McNemar test,
+-   `"cc"`: asymptotic McNemar test with continuity correction,
+-   `"midp"`: McNemar mid-P approach.
+
+> Note: `midp` does not return a Z statistic (it is reported as `NA`),
+> but it returns p-values.
+
+### method = "asymptotic"
+
+`contingencytables::McNemar_asymptotic_test_paired_2x2()` uses the
+uncorrected statistic
+
+$$
+Z = \frac{b-c}{\sqrt{(b + c)}}
+$$ The test statistic `Z` can be negative or positive (Signed),
+depending on whether $b < c$ \< or $b > c$.
+
+-   If $b < c$, then $b−c < 0 ⇒ Z < 0$
+-   If $b >c$\`, then $b−c > 0 ⇒ Z > 0$
+
+For the asymptotic method, the sign of `Z` reflects the direction of the
+imbalance between discordant cells `b` and `c` (given your chosen
+outcome_levels order).
+
+### method = "cc": Z is non-negative by design
+
+`contingencytables::McNemar_asymptotic_test_CC_paired_2x2()` uses the
+continuity-corrected statistic
+
+$$
+Z_{cc} = \frac{\vert{b-c}\rvert-1}{\sqrt{(b + c)}}
+$$
+
+Because it uses $\vert{b-c}\rvert$, the returned $z_{cc}$ is always
+$≥ 0$
+
+### Example: compare methods
+
+```{r}
+fit_asym <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic"
+)
+
+fit_cc <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "cc"
+)
+
+fit_midp <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "midp"
+)
+
+summary(fit_asym)
+summary(fit_cc)
+summary(fit_midp)
+
+```
+
+## Multiple comparisons (Holm default, BH/Hochberg options)
+
+By default, `mcnemar_control()` uses **Holm** adjustment for family-wise
+error rate control. You can switch to:
+
+-   `"BH"` for false discovery rate control,
+-   `"hochberg"` for family-wise error rate control under certain
+    dependence assumptions
+
+```{r}
+fit_holm <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic",
+  p_adjust = "holm"
+)
+
+fit_bh <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic",
+  p_adjust = "BH"
+)
+
+fit_hoch <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic",
+  p_adjust = "hochberg"
+)
+
+summary(fit_holm)
+summary(fit_bh)
+summary(fit_hoch)
+```
+
+The results table includes both raw p-values and adjusted p-values.
+
+## Effect sizes (Cohen’s g and CI)
+
+`mcnemar_control()` reports Cohen’s *g* for paired 2×2 tables, along
+with a confidence interval (CI level set by `ci`).
+
+### Example: change CI level
+
+```{r}
+fit_ci90 <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic",
+  ci = 0.90
+)
+
+fit_ci95 <- mcnemar_control(
+  dat, "id", "condition", "outcome",
+  control = "Control",
+  method = "asymptotic",
+  ci = 0.95
+)
+
+summary(fit_ci90)
+summary(fit_ci95)
+```
+
+## Interpretation notes
+
+### Interpreting the McNemar Z statistic across methods
+
+In `mcnemar_control()`, the reported McNemar statistic `Z` comes from
+the underlying **contingencytables** functions. For
+`method = "asymptotic"`, `Z` is signed and can be negative or positive
+because it is computed from the difference of discordant counts (e.g.,
+proportional to $b - c$). For `method = "cc"`, the continuity-corrected
+statistic uses $|b - c|$ (so the returned `Z` is non-negative) and
+should be interpreted as a magnitude-only statistic. In both cases, the
+default p-value is two-sided and is computed from $|Z|$, so the sign
+does not affect the p-value.
+
+### (1) `Z` sign conventions: asymptotic vs cc
+
+-   With `method = "asymptotic"`, the reported `Z` can be **negative or
+    positive** (signed statistic).
+-   With `method = "cc"`, the reported `Z` is **non-negative**
+    (magnitude-only) because the continuity-corrected form uses an
+    absolute difference internally.
+
+This is expected and does not indicate an error; two-sided p-values
+depend on `abs(Z)`.
+
+### (2) Default `outcome_levels` ordering
+
+If you do not specify `outcome_levels`, the function chooses an order
+based on the **first appearance** of outcome values in your data after
+removing missing values. This can vary by dataset and can change the
+sign of the asymptotic `Z`.
+
+**Recommendation:** explicitly specify outcome ordering so the table
+layout and directionality are stable:
+
+```{r, eval=FALSE}
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control",
+  outcome_levels = c("No", "Yes")
+)
+```
+
+This ensures: - `tab[1,2]` corresponds to control=`"No"`,
+treatment=`"Yes"`, - `tab[2,1]` corresponds to control=`"Yes"`,
+treatment=`"No"`, and therefore the meaning of discordant counts and the
+sign of `Z` are interpretable.
+
+### Contigency table functionality
+
+A `mcnemar_table()` has been added to provide a table that summarises
+the values for each contingency table with some additional
+functionality. By dafault `mcnemar_table()` produces a table with only 4
+columns, each representing one of the cells from the contingency table.
+(i.e. in the order `a`, `b`, `c`, `d`.). default can then be used with
+the `DiscreteTests` and `DiscreteFWER` package. This allows the user to
+use the `DHolm()` function to calculate p-values for the mcnemar tests
+functions from the `DiscreteTests` package. The `mcnemar_test_pv()`
+function can perform the asymptotic or exact Mcnemar test.

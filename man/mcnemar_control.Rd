@@ -2,7 +2,8 @@
 % Please edit documentation in R/mcnemar_control.R
 \name{mcnemar_control}
 \alias{mcnemar_control}
-\title{Compare a control with one or more treatments using McNemar tests}
+\alias{print.mcnemarControl}
+\title{Compare a control with one or more treatments using multiple McNemar tests}
 \usage{
 mcnemar_control(
   data,
@@ -11,66 +12,388 @@ mcnemar_control(
   outcome,
   control,
   treatments = NULL,
-  method = c("asymptotic", "cc", "midp"),
-  p_adjust = c("holm", "BH", "hochberg"),
+  method = c("asymptotic", "cc", "midp", "exact_cond", "exact_uncond"),
+  p_adjust = c("holm", "BH", "BY", "hochberg", "discrete_holm", "bootstrap",
+    "resampling"),
   ci = 0.95,
   outcome_levels = NULL,
   drop_na = TRUE,
-  quiet = FALSE
+  quiet = FALSE,
+  gamma = 1e-04,
+  num_pi_values = 1000L,
+  R = 5000L,
+  seed = NULL
 )
+
+\method{print}{mcnemarControl}(x, digits = 4, alpha = NULL, color = interactive(), ...)
 }
 \arguments{
 \item{data}{A data frame in long format.}
 
 \item{id}{Name of the subject identifier column (character).}
 
-\item{condition}{Name of the condition column (character) containing control and treatments.}
+\item{condition}{Name of the condition column (character) containing control
+and treatments.}
 
 \item{outcome}{Name of the binary outcome column (character).}
 
 \item{control}{The control level (value in \code{condition}).}
 
-\item{treatments}{Optional vector of treatment levels. Default: all levels except \code{control}.}
+\item{treatments}{Optional vector of treatment levels. Default: all levels
+except \code{control}.}
 
-\item{method}{McNemar method: one of \code{"asymptotic"} (default), \code{"cc"}, \code{"midp"}.}
+\item{method}{McNemar method: one of \code{"asymptotic"} (default),
+\code{"cc"}, \code{"midp"}, \code{"exact_cond"}, or
+\code{"exact_uncond"}.}
 
-\item{p_adjust}{Multiple-testing adjustment: \code{"holm"} (default), \code{"BH"}, or \code{"hochberg"}.}
+\item{p_adjust}{Multiple-testing adjustment: \code{"holm"} (default),
+\code{"BH"}, \code{"BY"}, \code{"hochberg"}, \code{"discrete_holm"},
+\code{"bootstrap"}, or \code{"resampling"}. \code{"discrete_holm"} is
+available only when \code{method = "exact_cond"}. \code{"bootstrap"} is
+available only when \code{method = "asymptotic"}. \code{"resampling"} is
+available only when \code{method = "midp"}.
+See \link[stats]{p.adjust}.}
 
-\item{ci}{Confidence level for Cohen's \emph{g} CI. Default 0.95.}
+\item{ci}{Confidence level stored in \code{settings} for downstream confidence
+interval calculations in \code{\link{mcnemar_table}()}. Default is \code{0.95}.}
 
-\item{outcome_levels}{Optional length-2 character vector giving outcome levels order.}
+\item{outcome_levels}{Optional length-2 character vector giving the order of
+the two outcome levels.}
 
-\item{drop_na}{Logical; if \code{TRUE}, drop pairs missing control or treatment outcome.}
+\item{drop_na}{Logical; if \code{TRUE}, drop pairs missing control or
+treatment outcome.}
 
-\item{quiet}{Logical; if \code{FALSE}, message/warn for common edge cases.}
+\item{quiet}{Logical; if \code{FALSE}, message or warn for common edge cases.}
+
+\item{gamma}{Numeric; Berger and Boos adjustment parameter for
+\code{method = "exact_uncond"} that is used by
+\code{\link[contingencytables]{McNemar_exact_unconditional_test_paired_2x2}()}.
+Default is \code{1e-4}.}
+
+\item{num_pi_values}{Integer; number of values in the nuisance-parameter grid
+for \code{method = "exact_uncond"} that is used by
+\code{\link[contingencytables]{McNemar_exact_unconditional_test_paired_2x2}()}.
+Default is \code{1000L}.}
+
+\item{R}{Integer; number of bootstrap / resampling replicates used when
+\code{p_adjust = "bootstrap"} or \code{p_adjust = "resampling"}.
+Default is \code{5000L}.}
+
+\item{seed}{Optional integer seed for reproducible bootstrap / resampling
+multiplicity adjustment when \code{p_adjust = "bootstrap"} or
+\code{p_adjust = "resampling"}.}
+
+\item{x}{An object returned by \code{mcnemar_control()}.}
+
+\item{digits}{Number of digits used for display formatting of p-value columns.
+Default is \code{4}.}
+
+\item{alpha}{Optional significance threshold used only for display
+highlighting. If \code{NULL} (default), \code{alpha = 1 - x$settings$ci}.}
+
+\item{color}{Logical; if \code{TRUE} (default in interactive sessions),
+significant values in the \code{p_value} and \code{p_adjusted} columns of
+the comparison-level results tibble are displayed in red when ANSI color
+output appears to be supported. If \code{FALSE}, the tibble is printed
+without color highlighting.}
+
+\item{...}{Additional arguments passed to tibble printing.}
 }
 \value{
-An object of class \code{"mcnemarControl"} with elements \code{results} and \code{settings}.
+An object of class \code{"mcnemarControl"} with elements:
+\itemize{
+\item \code{results}: a data frame containing one row per
+treatment-versus-control comparison, including the test statistic
+(if defined), raw p-value, and multiplicity-adjusted p-value.
+\item \code{settings}: a list containing the analysis settings used to
+construct the comparisons.
+}
+
+The object \code{x}, returned invisibly.
 }
 \description{
-Runs paired 2x2 McNemar tests comparing a \emph{control} condition with one or more
-\emph{treatment} conditions from \strong{long-format} data.
+Runs paired 2x2 McNemar-type tests comparing a \emph{control} condition with
+one or more \emph{treatment} conditions with data in \strong{long-format}.
+
+Prints the comparison-level results stored in an object returned by
+\code{mcnemar_control()}. This is the compact row-by-row console display of
+control-versus-treatment McNemar comparisons.
 }
 \details{
+\code{mcnemar_control()} performs a family of \strong{pairwise matched
+comparisons} between a control condition and one or more treatment
+conditions. For each treatment, the function constructs a paired 2x2 table
+using the binary outcome under control and the binary outcome under that
+treatment for the same subjects, and then applies the requested
+McNemar-type test. In each comparison, inference is driven by the
+discordant pairs.
+
+In \code{mcnemar_control()} the outcome levels supplied in \code{outcome_levels}
+are \code{"No"} treated as failure and \code{"Yes"} as success. The table is
+created with:
+\itemize{
+\item rows = control outcomes
+\item columns = treatment outcomes
+}
+
+producing a table in the order:
+
+\preformatted{
+              Treatment: No   Treatment: Yes
+Control: No          a                b
+Control: Yes         c                d
+}
+
+In this layout, the \emph{discordant} pairs are the upper-right cell \code{b}
+(control = No, treatment = Yes) and lower-left cell \code{c}
+(control = Yes, treatment = No). These are the only cells used by all
+McNemar-type tests.
+
 \strong{Interpreting the McNemar test statistic (\code{Z}) across methods:}
-For \code{method = "asymptotic"}, \code{Z} is signed (negative or positive) because it is computed
-from the difference of discordant counts (proportional to \code{b - c}).
-For \code{method = "cc"}, the continuity-corrected statistic uses \code{abs(b - c)} and therefore
-returns a non-negative \code{Z}, which should be interpreted as a magnitude-only statistic.
-In both cases, the default p-value is two-sided and depends on \code{abs(Z)}, so the sign of
-\code{Z} does not affect the p-value.
+
+Five different methods for the McNemar test can be selected, calling
+functions from the \pkg{contingencytables} package.
+
+\itemize{
+\item \code{method = "asymptotic"}: \code{Z} is signed because it is
+computed from the difference of discordant counts (proportional to
+\code{b - c}).
+
+\item \code{method = "cc"}: the continuity-corrected statistic uses
+\code{abs(b - c)} and therefore returns a non-negative \code{Z}, which
+should be interpreted as a magnitude-only statistic.
+
+\item \code{method = "midp"}: the mid-p test returns a p-value;
+\code{Z} is not defined and is returned as \code{NA}.
+
+\item \code{method = "exact_cond"} and \code{method = "exact_uncond"}:
+exact methods return p-values only; \code{Z} is not defined and is
+returned as \code{NA}.
+}
+
+In all cases, the default hypothesis test is two-sided.
+
+When multiple treatments are compared against the same control, the
+resulting p-values form a multiple-testing family. The adjusted p-values
+returned by \code{mcnemar_control()} control multiplicity across the set
+of control-versus-treatment hypotheses. \code{p_adjust = "holm"} is the
+default for planned control-versus-treatment comparisons by providing
+family-wise error control.
+
+\strong{Discrete Holm for exact McNemar (optional)}
+
+When \code{method = "exact_cond"}, you may set \code{p_adjust = "discrete_holm"}
+to apply a McNemar-specific discrete Holm step-down adjustment. This procedure
+exploits the exact conditional null distribution of each test's two-sided
+p-value, which—conditional on the number of discordant pairs \eqn{m=b+c}—is
+induced by \eqn{B(m, 0.5)}. At step \eqn{j} of the step-down sequence, the
+method compares the ordered raw p-value \eqn{p_{(j)}} to the smallest
+threshold \eqn{t} such that \eqn{\sum_{k=j}^{m} q_{(k)}(t) \le \alpha}, where
+\eqn{q_{(k)}(t) = \Pr_{H_0}\{p_{(k)} \le t \mid m_{(k)}\}} is computed from the
+exact Binomial distribution. The adjusted p-values are the minimal \eqn{\alpha}
+at which each comparison would be rejected under this step-down rule, capped at
+1 and enforced to be non-decreasing in rank.
+
+\emph{When to use.} The discrete Holm option is most beneficial when many
+comparisons have small numbers of discordant pairs (sparse or highly discrete
+settings), where it can be materially less conservative than standard Holm yet
+still achieves strong FWER control. Because it relies on the exact conditional
+Binomial model, it is offered only for \code{method = "exact_cond"}.
+
+\strong{Bootstrap multiplicity adjustment for asymptotic McNemar (optional)}
+
+When \code{method = "asymptotic"}, you may set
+\code{p_adjust = "bootstrap"} to apply a correlation-aware bootstrap
+multiplicity adjustment for the family of control-versus-treatment McNemar
+comparisons. This option is intended to align with the bootstrap alternative
+described by Westfall, Troendle, and Pennello (2010) for multiple McNemar
+tests in multivariate binary data settings, where several paired comparisons
+are based on the same subjects.
+
+The procedure uses the asymptotic McNemar \code{Z} statistics, resamples
+subjects with replacement from the complete multivariate binary profiles, and
+calibrates adjusted p-values using the bootstrap distribution of the maximum
+absolute centered test statistic across the treatment family. The resulting
+adjusted p-values are approximate, familywise-error-rate-oriented, and
+account for the correlation structure induced by repeated observations on the
+same subjects.
+
+\emph{When to use.} The bootstrap option is most useful when
+control-versus-treatment McNemar comparisons are correlated because all
+treatments are measured on the same subjects, and a dependence-aware
+multiplicity adjustment is desired.
+
+\emph{Requirements.} Because this bootstrap adjustment is designed for the
+multivariate repeated-subject setting, it uses only subjects with complete
+observed outcomes across the full control-plus-treatments family included in
+the adjustment.
+
+\strong{Resampling adjustment for mid-\eqn{p} McNemar (optional)}
+
+When \code{method = "midp"}, you may set \code{p_adjust = "resampling"} to
+apply a subject-level resampling-based single-step minP adjustment for the
+family of control-versus-treatment mid-\eqn{p} McNemar tests. This option is
+intended as a dependence-aware multiplicity companion to \code{method = "midp"}
+in repeated-subject settings where all treatment comparisons are based on the
+same subjects.
+
+The procedure uses the raw mid-\eqn{p} values from each treatment-versus-control
+comparison, resamples complete subject profiles with replacement from the set of
+subjects with non-missing outcomes across the full control-plus-treatments family,
+recomputes the family of mid-\eqn{p} values in each resample, and calibrates
+adjusted p-values from the resampling distribution of the minimum raw
+mid-\eqn{p} value across the treatment family.
+
+\emph{When to use.} The resampling option is most useful when
+control-versus-treatment comparisons are correlated because all treatments are
+measured on the same subjects, and a dependence-aware multiplicity adjustment is
+preferred over standard methods such as Holm.
+
+\emph{Requirements.} Because the resampling adjustment is family-based, it uses
+only subjects with complete observed outcomes across the full control-plus-
+treatments family included in the adjustment.
+
+\strong{Appropriate use}
+
+\code{mcnemar_control()} is \strong{not} a full repeated-measures
+model. McNemar's test is a paired binary test of marginal homogeneity for
+two related responses; it does not explicitly model period effects,
+treatment order, sequence, carryover, or treatment-by-period interactions.
+As a result, when the same subjects are observed under control and several
+treatments, the results should be interpreted as \strong{pairwise marginal
+differences under the observed study design}, not necessarily as treatment
+effects isolated from time/order effects.
+
+The function is most naturally interpreted when:
+\itemize{
+\item each subject contributes one binary response per condition,
+\item control and treatment responses are measured on the same subjects,
+\item the order of conditions is randomized or counterbalanced across
+subjects,
+\item and carryover is negligible or minimized by design.
+}
+
+In repeated-measures studies where all subjects receive conditions in the
+same fixed order (for example, control first and treatments afterwards),
+treatment effects may be confounded with period/order effects. In that
+setting, the pairwise McNemar comparisons returned by
+\code{mcnemar_control()} should be interpreted as \strong{matched marginal
+differences under the observed presentation order}, not necessarily as
+treatment effects fully separated from time, sequence, or carryover.
+
+If the order of control and treatments is randomized or counterbalanced
+across subjects, the same pairwise control-versus-treatment comparisons
+remain valid but become more interpretable, because treatment is no longer
+perfectly tied to a fixed sequence position. Randomization or
+counterbalancing therefore improves the design-based interpretation of the
+McNemar workflow, although \code{mcnemar_control()} still does not
+explicitly estimate period, sequence, or carryover effects.
+
+When carryover is scientifically plausible, washout periods can help reduce
+residual effects from earlier conditions before later conditions are
+measured. A washout period does not guarantee the absence of carryover, but
+it can reduce contamination of later responses by earlier treatments and
+thereby improve the interpretability of repeated-condition comparisons.
+
+Randomization, counterbalancing, and washout improve the design-based
+validity of the multiple pairwise McNemar tests, but they do not convert
+\code{mcnemar_control()} into a full repeated-binary model. If order,
+period, sequence, or carryover effects need to be estimated directly, users
+should consider a repeated-binary framework such as Cochran's Q for a
+global repeated-condition test, or model-based approaches such as
+generalized estimating equations (GEE), generalized linear mixed models
+(GLMM), or conditional logistic regression.
+
+Note: Cohen's g and confidence intervals are \strong{not} computed by
+\code{mcnemar_control()}. Use \code{\link{mcnemar_table}()} to obtain the
+underlying matched 2x2 cell counts and, if requested, Cohen's g and
+confidence intervals for each control-versus-treatment comparison.
 }
 \examples{
 dat <- mcnemar_example_long(seed = 1)
-fit <- mcnemar_control(dat, id = "id", condition = "condition", outcome = "outcome",
-                       control = "Control")
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control"
+)
+
+fit
 summary(fit)
+
+# Asymptotic McNemar with bootstrap multiplicity adjustment
+fit_boot <- mcnemar_control( 
+dat, 
+id = "id", 
+condition = "condition", 
+outcome = "outcome", 
+control = "Control", 
+method = "asymptotic", 
+p_adjust = "bootstrap", 
+R = 1000L, 
+seed = 1 
+) 
+
+# Mid-p McNemar with resampling-based minP multiplicity adjustment 
+fit_midp_resamp <- mcnemar_control( 
+dat, 
+id = "id", 
+condition = "condition", 
+outcome = "outcome", 
+control = "Control", 
+method = "midp", 
+p_adjust = "resampling", 
+R = 1000L, 
+seed = 1 
+) 
 
 }
 \references{
-Fagerland MW, Lydersen S, Laake P (2017). \emph{Statistical Analysis of Contingency Tables}.
-Chapman & Hall/CRC.
+Edwards AL (1948). Note on the ``correction for continuity'' in testing the
+significance of the difference between correlated proportions.
+\emph{Psychometrika}, 13(3), 185--187.
 
-See also \code{\link[contingencytables]{McNemar_asymptotic_test_paired_2x2}} and
-\code{\link[contingencytables]{McNemar_asymptotic_test_CC_paired_2x2}}.
+Fagerland MW, Lydersen S, Laake P (2013). The McNemar test for binary
+matched-pairs data: mid-p and asymptotic are better than exact conditional.
+\emph{BMC Medical Research Methodology}, 13, 91.
+
+Fagerland MW, Lydersen S, Laake P (2017). Statistical Analysis of
+Contingency Tables. Chapman & Hall/CRC.
+
+Fay MP (2020). “Exact McNemar's Test and Matching Confidence Intervals,”
+\emph{exact2x2} vignette, CRAN.
+
+McNemar Q (1947). Note on the sampling error of the difference between
+correlated proportions or percentages. \emph{Psychometrika}, 12(2), 153--157.
+
+Westfall PH, Troendle JF, Pennello G (2010). Multiple McNemar Tests.
+\emph{Biometrics}, 66(4):1185--1191.
+}
+\seealso{
+\itemize{
+\item \code{\link[rstatix]{pairwise_mcnemar_test}()} in the
+\pkg{rstatix} package for generic \strong{all-pairs} post hoc McNemar
+comparisons among multiple related conditions. Compared with that workflow,
+\code{mcnemar_control()} is intended for planned control-versus-treatment
+comparisons rather than every possible pair of repeated conditions.
+
+\item \code{\link[rstatix]{cochran_qtest}()} in the
+\pkg{rstatix} package for a Cochran's Q test when the primary aim
+is a single omnibus repeated-binary test across three or more matched
+conditions before pairwise follow-up comparisons.
+
+\item Repeated-binary modeling approaches such as generalized estimating
+equations (GEE), generalized linear mixed models (GLMM), or conditional
+logistic regression when treatment order, period effects, sequence,
+carryover, or subject-level correlation need to be modeled explicitly.
+}
+
+\itemize{
+\item \code{\link{summary.mcnemarControl}()} for an aggregated summary view.
+\item \code{\link{mcnemar_control_summary}()} for constructing the summary
+object explicitly.
+\item \code{\link{mcnemar_table}()} for matched 2x2 tables, Cohen's g, and
+optional confidence intervals corresponding to the printed comparisons.
+}
 }

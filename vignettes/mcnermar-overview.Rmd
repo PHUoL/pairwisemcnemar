@@ -1,0 +1,154 @@
+---
+title: "Guidance on the use of `mcnemar_control()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Guidance on the use of mcnemar_control()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Overview
+
+`mcnemar_control()` performs multiple pairwise comparisons between a named *Control* condition and one or more *Treatment* conditions using McNemar-type tests. A contingency $2\times2$ table is constructed from binary outcomes for each combination of control and treatment for the each subject, then tests whether the marginal binary response differs between the two conditions.
+
+The McNemar’s test is the standard test of marginal homogeneity for paired binary outcomes, and it is appropriate when the same experimental units are measured twice (or matched in pairs) on a dichotomous outcome. In the McNemar test, inference is based on comparing the discordant pairs in the contingency table. i.e. subjects who change their responses between the two conditions (before and after). Multiple McNemar tests with the exact method has been described by @westfall2010.
+
+## What the function tests
+
+`mcnemar_control()` was designed for planned control-versus-treatment contrasts and not on all possible pairwise contrasts among all repeated conditions, which can be done with the `pairwise_mcnemar_test()` function from the **rstatix** package. It aim is to determine which treatment conditions is different from the control condition.
+
+When multiple treatments are compared against the same control, the resulting p-values form a multiple-testing scenario. For that reason, the adjusted p-values returned by `mcnemar_control()` is preferred to raw p-values when drawing conclusions across the whole treatment set. The default method for adjusted p-values is the Bonferroni-Holm method[@holm1979] to control familywise error rate (FWER). It is important here because the same subjects (and the same control response) appear in every control-versus-treatment comparison.
+
+There are five different methods for the McNemar test. The `mcnemar_control()` functions call these tests from the **contingencytables** package. The default is the asymptotic McNemar test. Other methods are the continuity correction test, exact conditional and unconditional tests and a mid-p test. Simulation studies by @fagerland2013 showed that the mid-p test was comparable to McNemar unconditional test and was recommended over the exact conditional test by the authors. A brief overview of these methods are described in the [overview of McNemar test methods](methods-mcnemar.html).
+
+## What the function does not model
+
+Although `mcnemar_control()` respects the paired nature of each individual control-versus-treatment comparison, it is not a full repeated-measures model. The McNemar’s test is a two-condition paired binary test of marginal homogeneity. It does not explicitly estimate period effects, treatment order, sequence effects, carry-over effects, or treatment-by-period interactions. This limitation is particularly important when the same subjects are measured under many conditions over time. In such designs, differences between control and treatment may reflect not only treatment, but also time/order, learning, fatigue, adaptation, or carry-over from previous exposures. For repeated-measures or crossover designs, those effects are design features that may influence the observed response.
+
+If the scientific aim is to estimate treatment effects while simultaneously controlling for period, sequence, carry-over, or subject-level correlation, then methods such as generalized estimating equations (GEE), generalized linear mixed models (GLMM), or conditional logistic regression are more appropriate. Those approaches are explicitly designed for correlated repeated binary outcomes and can include treatment, period, sequence, lagged response, or carry-over terms directly in the model.
+
+`mcnemar_control()` provides evidence of pairwise marginal differences under the observed design, not a full treatment-period-sequence decomposition.
+
+## Suitable study designs
+
+The design that best matches the intended use of `mcnemar_control()` is a repeated-measures paired-binary control-versus-treatment design in which
+
+- each subject contributes **one binary response per condition**,
+
+- control and treatment responses are measured on the **same subjects**,
+
+- condition order is **randomized or counterbalanced across subjects**,
+
+- and **carry-over** is negligible or minimized by design.
+
+The `mcnemar_control()` function accepts data in the long format long format with one row per id–condition observation, one binary outcome, one designated control level, and one or more treatment levels. Each treatment is then compared with the control using the same matched subjects.
+
+```{r}
+# load package
+library(mcnemarControl)
+# Example data
+dat <- mcnemar_example_long(seed = 1)
+#
+tibble::tibble(dat)
+```
+
+A particularly suitable design is one in which condition order is **randomized or counterbalanced**. In repeated-measures and crossover experiments, sequence randomization is the main design mechanism that prevents treatment from being tied to a single period/order position. When treatments are spread across different positions in the sequence, general practice, fatigue, or time trends are more evenly distributed across conditions, making pairwise control-versus-treatment differences easier to interpret as treatment-related rather than purely order-related. Counterbalancing strategies such as balanced Latin squares or Williams designs are standard tools for this purpose.
+
+Washout is also part of a suitable design whenever carry-over is scientifically plausible. A **washout period** is inserted between conditions to allow residual effects of one condition to dissipate before the next treatment is applied. Washout does not guarantee the complete absence of carry-over, but it improves the interpretability of repeated-condition comparisons and is a standard design recommendation in crossover studies whenever treatments may have lingering effects.
+
+## Fixed-order vs Randomised/counterbalanced designs
+
+A **fixed-order** design is one in which every subject receives conditions in the same sequence—for example, control first, followed by each treatment in a predetermined order. `mcnemar_control()` can still be applied in this setting, because each control-versus-treatment comparison still uses one matched pair per subject. However, the interpretation becomes much weaker because treatment is now tied to period/order position. If all subjects receive control at period 1 and Treatment 5 at period 6, then any difference between those conditions may reflect period alone, treatment alone, or a mixture of both. This is the classic fixed-order confounding problem in repeated-measures and crossover designs.
+
+Under a **fixed-order** design, the plausible interpretation with `mcnemar_control()` might be :
+
+::: callout-tip
+## Fixed-order designs
+
+“Treatment X differs from the control in a pairwise matched comparison of the same subjects under the observed presentation order for a fixed-order design.”
+:::
+
+That is a valid statement about the data, but it is **not** equivalent to saying that the treatment effect has been isolated from order or carry-over. Adjusted p-values are still useful here because they control the multiplicity of the family of control-versus-treatment comparisons, but they do **not** solve the design confounding. Multiplicity correction and design confounding are separate issues.
+
+By contrast, a **randomized-order** or **counterbalanced** design improves the interpretation of the *same* `mcnemar_control()` output, because treatment is no longer perfectly tied to one sequence position. The McNemar tests themselves do not change, but the design makes the pairwise matched differences more credible as treatment-related effects. In other words, randomization/counterbalancing improves the **design-based validity** of the McNemar tests, even though the function still does not estimate period or carry-over directly.
+
+Therefore, if a **randomized-order** or **counterbalanced** design was used instead, possible interpretation if `mcnemar_control()` was used could be:
+
+::: callout-tip
+## Randomized-order/counterbalanced designs
+
+“Treatment X differs from control in a pairwise matched comparison of the same subjects, and the randomized/counterbalanced order makes this marginal difference less likely to be driven solely by fixed period/order effects.”
+:::
+
+## Extended example
+
+The `mcnemar_control()` function is easy use, however you might not want to use all of the default options, as was previously outlined in [introduction](mcnemarControl.html). Additionally, using `summary()` for your fitted object from `mcnemar_control()` will provide you with additional information that you might find useful.
+
+Here is an example of how you can uses `mcnemar_control()` for multiple McNemar tests with the default adjustment for multiplicity and then `mcnemar_table()` for further examination of the contingency tables with estimates for Cohen's g with one method for calculating appropriate confidence intervals. Further details on different methods for estimating confidence intervals for Cohen's *g* is described in [confidence intervals for Cohen's *g*](effect-size.html).
+
+Going back to our data object, `dat` that we have created from the example. `dat` contains 3 columns and 160 rows.`id` is the participant index for the 40 participants. i.e. $40 \times$ the number of treatment `conditions`.
+
+```{r}
+str(dat)
+```
+
+Here we see that are are 4 `conditions` that are the `control`, `TrtA`, `TrtB` and `TrtC`. The third columns is the `outcome` levels which are `No` and `Yes`. It should be noted that the variables `conditions` and `outcome` do not need to be factors. The `mcnemar_control()` function will still be able to calculate the required parameters and produce the same output if those variables were not factors.
+
+### Step 1. Fit the data to mcnemar_control()
+
+The default for `mcnemar_control()` that we have used previously is shown below.
+
+```{r eval=FALSE, include=FALSE}
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control"
+)
+```
+
+The default Mcnemar test is the asymptotic test (you can include `method="asymptotic` in the function to explicitly state which method to use, but is not necessary if you want to use the default). `p-adjust="holm"` is the Bonferroni-Holm method that is used as its default.
+
+Before you use the function, make sure that some of the required packages are installed and loaded.
+
+```{r eval=FALSE, include=FALSE}
+library(tidyverse) # use for some data wrangling.
+library(contingencytables) # use for the McNemar test
+library(effectsize) # used for calculating Cohen's g
+library(boot) # needed for bootstrap CI for Cohen's g if you choose this option
+```
+
+In our example, let's used the McNemar mid-*p* test instead of the asymptotic test, by using `method="midp"`. We shall keep the default p-adjustment method.
+
+```{r}
+fit2 <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control",
+  method="midp"
+)
+```
+
+If we now call `fit2`, the mcnemar_control() functions provides a table with some basic information, including a top header, that would allow use to see how each treatment compares to the control. There is a small difference between the `p-value` and the `p-adjusted` value for the comparisons of the control against treatment B and C.
+
+```{r}
+fit2
+```
+
+### Step 2. Getting additional information
+
+Some users would find that the details provided from `fit` what they required. However, additional details of the analysis of the data can be useful and this can be obtained if we use `summary()` that calls the `mcnemar_control_summary()` function.
+
+```{r}
+summary(fit2)
+```
+
+`summary()` outputs the table and the header as `fit`, with a slight difference in the order of the McNemar tests, based on the value for `sort_by=`. The default behaviour show the comparison with lowest `p_adjusted` (this is the default) value on the top with the comparison with the second smallest `p-adjusted` value next and so on. `summary()` also provides 5 additional details. These include an analysis overview, an indication of which treatments had significant p-values and descriptive summary of the discordant-pairs just before the table. There is a **Note** section. In our example, we are informed that the test statistic is reported as `NA` as this is not calculated for the mid-*p* method. Finally, we are reminded that we can get estimates for Cohen's *g* and confidence intervals by using the `mcnemar_table()` function.

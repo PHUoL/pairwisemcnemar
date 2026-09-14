@@ -1,27 +1,36 @@
-Package: mcnemarControl
+Package: McnemarControl
 Type: Package
-Title: McNemar Comparisons of Multiple Treatments Against a Control
+Title: McNemar tests for a Control against multiple Treatments
 Version: 0.1.6
-Authors@R: person(given = "Peter", family = "Ho", role = c("aut", "cre"), email = "p.ho@leeds.ac.uk")
+Authors@R: person(given = "Peter", family = "Ho", role = c("aut", "cre","cph"), email = "p.ho@leeds.ac.uk",
+            comment = c(ORCID = "0000-0002-2533-0183"))
 Description: Convenience functions to run McNemar tests comparing a control condition
     with one or more treatment conditions from long-format paired binary data, using
-    the contingencytables package for asymptotic, continuity-corrected, and mid-P
-    variants; and effect sizes (Cohen's g) with confidence intervals via effectsize.
+    mostly functions from contingencytables package. Includes effect size estimates and
+    confidence intervals, adjustments to confidence intervals and p-values and sample
+    size and power calculations.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
-    contingencytables (>= 3.1.0),
+    contingencytables,
     effectsize,
     dplyr,
     tidyr,
     tibble,
     rlang,
-    stats
+    stats,
+    cli,
+    pillar,
+    vctrs
 Suggests:
     testthat (>= 3.0.0),
     knitr,
-    rmarkdown
+    rmarkdown,
+    boot,
+    janitor,
+    exact2x2
 VignetteBuilder: knitr
+Config/testthat/edition: 3

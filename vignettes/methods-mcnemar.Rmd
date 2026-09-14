@@ -1,26 +1,310 @@
 ---
-title: "McNemar methods: asymptotic, continuity correction, and mid-P"
+title: "McNemar test methods"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{McNemar methods: asymptotic, continuity correction, and mid-P}
+  %\VignetteIndexEntry{McNemar methods}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+bibliography: bibliography.bib
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
+# Overview {#sec-overview}
+
+The `mcnemar_control()` function implements five different methods from the [contingencytables](https://ocbe-uio.github.io/contingencytables/) package. Each of the five McNemar test methods have been described by @fagerland2013. An [overview of McNemar test methods](methods-mcnemar.html) for multiple McNemar tests has been provided with an extended example of how you might want to use the function, alongside how your chosen study design affects interpretation of results.
+
+Each of the five McNemar test method applied to analyse data from a single $2\times2$ contingency table is outlined with guidance on single and multiple use.
+
+## The asymptotic McNemar test {#sec-asymp}
+
+For the asymptotic McNemar test, the [McNemar_asymptotic_test_paired_2x2](https://ocbe-uio.github.io/contingencytables/reference/McNemar_asymptotic_test_paired_2x2.html) function calculates a $Z$ statistic from a $2\times2$ contingency table, where
+
+$$
+Z = \frac{b-c}{\sqrt{(b + c)}}
+$$
+
+The test statistic $Z$ can be negatively or positively signed, depending on whether $b < c$ \< or $b > c$.
+
+If $b < c$, then $b−c < 0 ⇒ Z < 0$
+
+If $b >c$\`, then $b−c > 0 ⇒ Z > 0$
+
+For the asymptotic method, the sign of $Z$ reflects the direction of the imbalance between discordant cells $b$ and $c$ (given the order of outcome_levels in the `mcnemar_control()` function). $Z^2$ is appropriately equivalent to $\chi^2$ with 1 degree of freedom when the number of discordant cells is large ($b + c \geq 20$) [@conover1999].
+
+When defaults are used for `mcnemar_control()` the functions uses the asymptotic McNemar test method (`method ="asymptotic"`) , with the Holm method[@holm1979] the default for the p-value adjustment method (`p_adjust="holm"`).
+
+```{r eval=FALSE, include=FALSE}
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control"
+)
+```
+
+Although, `ncnemar_control()` calls functions from the [contingencytables](https://ocbe-uio.github.io/contingencytables/) package, it is worth pointing out here that there is a difference in how outcome levels are assigned to the $2\times2$ contingency table. This will become relevant when discussing effect size estimates.
+
+`mcnemar_control()` assigns the outcome levels for `No` (failure) and `Yes` (success) with rows in the contingency table representing the **control** outcome and columns for the **treatment** outcome.
+
+```{r}
+# load package
+library(mcnemarControl)
+
+# Use example data
+dat <- mcnemar_example_long(seed = 2)
+# Select the data only for the control and treatment A (TrtA)
+dat_TrtA <- dat[1:80,1:3]
+# reshape to wide
+library(tidyr)
+wide_dat <- dat_TrtA |>
+pivot_wider(names_from = condition, values_from = outcome)
+# 
+library(janitor)
+wide_dat |>
+    tabyl(Control, TrtA) |>
+    adorn_title("combined")
+```
+
+In the table, the **discordant pairs** are the upper-right cell $b =15$ (control = No, treatment = Yes) and the lower-left cell $c=1$ (control = Yes, treatment = No). The **concordant cells**, which are not used in the McNemar test, are the upper-left cell $a= 6$ (control = No, treatment = No) and the lower-right cell $d=18$ (control = Yes, treatment = Yes).
+
+```{r}
+fit.asymp <- mcnemar_control(
+    dat_TrtA,
+    id = "id",
+    condition = "condition",
+    outcome = "outcome",
+    control = "Control"
+)
+fit.asymp
+```
+
+Although, the mapping for the outcome levels are different than in example from @fagerland2013, the placement of the discordant cells $b$ and $c$ are the same, the results for the McNemar test will therefore be the same if the functions from the [contingencytables](https://ocbe-uio.github.io/contingencytables/) package is used instead of `mcnemar_control()`. However, here the $Z$ test statistic is negative, as the discordant pairs are the upper-right $b=1$ (control = Yes, treatment = No) and the lower-left $c=15$ (control = No, treatment = Yes).
+
+```{r}
+# use contingencytables
+library(contingencytables)
+# Create contingency table
+dat.TrtA <- c(15,4,14,7)
+dat2 <- matrix(dat.TrtA, nrow = 2, byrow = TRUE)
+dat2
+# run asymptotic test
+McNemar_asymptotic_test_paired_2x2(dat2)
+```
+
+The [mcnemar.test](https://rdrr.io/r/stats/mcnemar.test.html) function with `correct=FALSE` from base R can also be used for the McNemar's chi-squared test for symmetry.
+
+```{r}
+# Create contingency table 
+dat.TrtA <- c(7,14,4,15)
+dat3 <- matrix(dat.TrtA, nrow = 2, byrow = TRUE)
+dat3
+# use mcnemar.test() without continuity correct
+out <- mcnemar.test(dat3, correct=FALSE)
+out
+```
+
+We get the $Z$ statistic by square rooting the chi-square test statistic.
+
+```{r}
+# Apply square root to chi-square statistic
+sqrt(out$statistic)
+```
+
+## The asymptotic McNemar test with continuity correction {#sec-asympCC}
+
+@edwards1948 proposed a modification to the McNemar chi-squared statistic, following on from work by @yates1934 who showed that estimates of the chi-squared statistic for a $2 \times 2$ contingency table with small numbers ($N$) could be significantly improved with a correction for continuity. The formula for the modified test statistic becomes
+
+$$
+Z_{cc} = \frac{\vert{b-c}\rvert-1}{\sqrt{(b + c)}}
+$$
+
+Because it uses $\vert{b-c}\rvert$, the returned $z_{cc}$ is always $≥ 0$
+
+When `method = "cc"` is given in `mcnemar_control()`, it uses the [McNemar_asymptotic_test_CC_paired_2x2](https://ocbe-uio.github.io/contingencytables/reference/McNemar_asymptotic_test_CC_paired_2x2.html) function the asymptotic McNemar test with continuity correction.
+
+```{r}
+fit.cc <- mcnemar_control(
+    dat_TrtA,
+    id = "id",
+    condition = "condition",
+    outcome = "outcome",
+    control = "Control",
+    method ="cc"
+)
+fit.cc
+```
+
+The `mcnemar.test()` with `correct=TRUE` can also be used to get the same result.
+
+```{r}
+# use mcnemar.test() with continuity correct
+out <- mcnemar.test(dat2, correct=TRUE)
+out
+```
+
+```{r}
+# Apply square root of chi-square statistic to get Z 
+sqrt(out$statistic)
+```
+
+## The Exact conditional McNemar test {#sec-exactCond}
+
+The exact conditional McNemar test, which has been described by [@fagerland2014], is also known as the exact conditional binomial test. @fagerland2013 states that the conditional probability under the null hypothesis of observing any outcome $x_{b}$ given the number of discordant cells $b + c$ is the binomial point probability, such that
+
+$$
+f (x_{b}|n) = \begin{pmatrix}n \\ x_{b}\end{pmatrix}\Biggl(\frac{1}{2}\Bigg)^n
+$$
+
+An exact one-sided *p*-value for the McNemar test can be found from the sum of probabilities [@fagerland2013]:
+
+$$
+\text{one-sided  } \textit{p-}\text{value} =  \sum_{x_{b = 0}}^{min(b,c)} f(x_{b}| n)
+$$
+
+A two sided *p*-value is then twice the value for the one-sided *p*-value. @fagerland2014 stated that when the discordant cells $b = c$ the two-sided *p*-value should equal to 1.
+
+When `method = "exact_cond"` is given in `mcnemar_control()`, it uses the [McNemar_exact_cond_test_paired_2x2](https://ocbe-uio.github.io/contingencytables/reference/McNemar_exact_cond_test_paired_2x2.html) function the exact conditional McNemar test.
+
+```{r}
+fit.exact <- mcnemar_control(
+    dat_TrtA,
+    id = "id",
+    condition = "condition",
+    outcome = "outcome",
+    control = "Control",
+    method ="exact_cond",
+    p_adjust = "discrete_holm"
+)
+fit.exact
+```
+
+## The mid-*p* McNemar test {#sec-midp}
+
+The McNemar mid-*p*-value can be determined doubling a one-sided exact *p*-value after subtracting half the probability of an observed outcome $x_b$, according to @fagerland2013,
+
+$$
+\text{mid}\textit{-p-}\text{value} = 2 \cdot \Big[ \text{one-sided  } \textit{p-}\text{value}- \frac{1}{2}f(x_{b}|n)\Big] = \text{two-sided  } \textit{p-}\text{value} - f(x_{b}|n)
+$$
+
+where $f$ is the probability function from the Exact conditional McNemar test [@sec-exactCond]. @fagerland2013 noted that an exact *p*-value will not estimated, as type I error rates can exceed the nominal level.
+
+```{r}
+fit.midp <- mcnemar_control(
+    dat_TrtA,
+    id = "id",
+    condition = "condition",
+    outcome = "outcome",
+    control = "Control",
+    method ="midp"
+)
+fit.midp
+```
+
+## The Exact unconditional McNemar test {#sec-exactUncond}
+
+The exact unconditional test, unlike the exact conditional test, uses both the discordant and both concordant cell from the $2 \times 2$ contingency table. @fagerland2014 provides an explanation of how *p*-values for the exact unconditional test is determined that was based on the work of @suissa1991. The probability that $p$, which is the probability of a discordant pair under the null hypothesis, can be represented as
+
+$$
+P(p) = \sum^{N}_{n=k}\begin{pmatrix}N \\ n\end{pmatrix}p^{n}(1-p)^{N-n}F_{n}(n-i_{n}-1)
+$$
+
+where $k = int(z^{2} +1)$, $int$ is the integer function with $F_{n}$ the binomial $(n,\frac{1}{2})$ cumulative distribution function @suissa1991. A one-sided exact unconditional p-value can be estimated by the maximisation of $P (p)$ over the range of $p$ [@fagerland2014], whereby
+
+$$
+\text{one-sided  } \textit{p-}\text{value} = \sup_{0<p<1}P(p)
+$$
+
+The two-sided *p*-value is twice that of the one-sided *p*-value. The exact unconditional McNemar test can be calculated with `ncnemar_control()`, using `method="exact_uncond"`, that calls the [McNemar_exact_unconditional_test_paired_2x2](https://ocbe-uio.github.io/contingencytables/reference/McNemar_exact_unconditional_test_paired_2x2.html) function.
+
+```{r}
+fit.exactUN <- mcnemar_control(
+    dat_TrtA,
+    id = "id",
+    condition = "condition",
+    outcome = "outcome",
+    control = "Control",
+    method ="exact_uncond"
+)
+fit.exactUN
+```
+
+## Comparison of methods
+
+**classic**
+
+Fagerland, Lydersen, and Laake found that the plain asymptotic McNemar test was close to nominal most of the time, though it did exceed the nominal level in some scenarios, usually only slightly. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+This is the method most directly affected by the Berger–Sidik / Westfall warning. Berger and Sidik report that the asymptotic McNemar test can have **size larger than nominal**, i.e. it may be anti-conservative. Therefore, **Holm-adjusted asymptotic McNemar p-values do not have an exact finite-sample FWER guarantee in general**, because the raw p-values themselves may not be valid null p-values. This is true whether the study order is randomized or fixed; the fixed-order issue adds interpretational confounding on top of that. [[asu.elsevierpure.com]](https://asu.elsevierpure.com/en/publications/exact-unconditional-tests-for-a-2-2-matched-pairs-design/), [[rweb.stat.umn.edu]](https://rweb.stat.umn.edu/R/library/stats/html/p.adjust.html), [[Multiple T...ta Science]](http://stat.wharton.upenn.edu/~steele/Courses/956/Resource/MultipleComparision/LeeWhitmoreTutorial.pdf)
+
+**When to use it:** use the classical asymptotic test when the discordant count is comfortably large and you are willing to tolerate small departures from nominal type-I error in exchange for simplicity and power.
+
+**For multiple treatment-vs-control McNemar comparisons:** its main advantage is **power and convenience**. If you are doing many pairwise treatment-vs-control comparisons and your discordant counts are reasonably large in each comparison, the asymptotic method is a sensible base test because it avoids the extra conservatism of exact conditional testing. However, it does **not** solve multiplicity or dependence across comparisons; if several treatments are compared with a shared control, you still need a multiple-testing adjustment or a dedicated multiple-McNemar procedure.
+
+**Bottom line:** good default when b+cb+cb+c is not small and you want a simple, reasonably powerful single-comparison p-value. [[academic.oup.com]](https://academic.oup.com/biometrics/article-abstract/66/4/1185/7333578), [[search.r-project.org]](https://search.r-project.org/CRAN/refmans/c212/html/c212BH.adjust.pvals.html), [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**CC**
+
+The continuity correction is usually more conservative than the raw asymptotic version, and Fagerland et al. found the continuity-corrected McNemar test performed poorly (mainly by being overly conservative) in their evaluations. That conservatism means the raw p-values may often be super-uniform, in which case Holm would still be valid as a multiplicity adjustment. But this is **not** the same as saying it has the exact Section 6 Westfall guarantee; it is still an asymptotic/approximate method, not an exact conditional McNemar method. [[link.springer.com]](https://link.springer.com/article/10.1186/1471-2288-13-91), [[Multiple T...ta Science]](http://stat.wharton.upenn.edu/~steele/Courses/956/Resource/MultipleComparision/LeeWhitmoreTutorial.pdf), [[leeds.prim...sgroup.com]](https://leeds.primo.exlibrisgroup.com/discovery/fulldisplay/cdi_pubmedcentral_primary_oai_pubmedcentral_nih_gov_2902578/44LEE_INST:VU1)
+
+This is the asymptotic McNemar test with the Edwards/Yates-style continuity correction, replacing ∣b−c∣\|b-c\|∣b−c∣ by ∣b−c∣−1\|b-c\|-1∣b−c∣−1.
+
+Older textbooks and software defaults often used this correction to improve small-sample approximation. [[cran.r-project.org]](https://cran.r-project.org/web/packages/exact2x2/vignettes/exactMcNemar.pdf), [[psiaims.github.io]](https://psiaims.github.io/CAMIS/R/mcnemar.html), [[Multiple M...r Research]](http://library.ncifrederick.cancer.gov/discovery/fulldisplay/cdi_pubmedcentral_primary_oai_pubmedcentral_nih_gov_2902578/01FREDERICK_INST:01FREDERICK)
+
+**When to use it:** historically, this was recommended when discordant counts were small enough that the plain asymptotic approximation seemed rough. However, modern evidence is not kind to it. Fagerland et al. found that the continuity-corrected asymptotic test behaved very much like the exact conditional test in being **too conservative**, but without the clean exact interpretation of a truly exact method. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**For multiple treatment-vs-control comparisons:** there is rarely a positive reason to prefer it. In a multiple-comparison setting, an already conservative single-comparison method becomes even more conservative after multiplicity adjustment, so the continuity-corrected method usually sacrifices power twice—once at the single-comparison level and again during multiplicity control. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[cran.r-project.org]](https://cran.r-project.org/web/packages/DiagrammeR/DiagrammeR.pdf), [[towardsdat...cience.com]](https://towardsdatascience.com/how-to-plot-graphs-using-the-diagrammer-package-in-r-3fe4642091cc/)
+
+**Bottom line:** mostly a legacy option; modern methodological work generally gives little reason to prefer it over better alternatives. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**Exact conditional**
+
+This is the cleanest case. The exact conditional McNemar test is the classic exact binomial/sign-test version based on the discordant count b+cb+cb+c. It is exact and conservative (super-uniform), which is why Berger and Sidik characterize it as conservative and low-powered rather than anti-conservative. Therefore, **standard Holm is valid here under arbitrary dependence across the multiple comparisons**, because the raw p-values are valid. Westfall’s Section 6 discrete Holm is then a **more specialized and often less conservative refinement** that additionally uses the exact discrete null support of those p-values. Fixed order does **not** break this multiplicity validity; it only changes the scientific interpretation to “difference under the observed order” rather than “pure treatment effect.” [[asu.elsevierpure.com]](https://asu.elsevierpure.com/en/publications/exact-unconditional-tests-for-a-2-2-matched-pairs-design/), [[rweb.stat.umn.edu]](https://rweb.stat.umn.edu/R/library/stats/html/p.adjust.html), [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[pdfcookie.com]](https://pdfcookie.com/documents/multiple-testing-with-minimal-assumptions-ro2n31jzynl4)
+
+The exact conditional McNemar test conditions on the total number of discordant pairs b+cb+cb+c and treats one discordant count as a binomial random variable with n=b+cn=b+cn=b+c and p=1/2p=1/2p=1/2 under the null. It has the appeal of **finite-sample exactness** under that conditional formulation. [[cran.r-project.org]](https://cran.r-project.org/web/packages/exact2x2/vignettes/exactMcNemar.pdf), [[par.nsf.gov]](https://par.nsf.gov/servlets/purl/10520593)
+
+**When to use it:** use it when you want strict exact conditioning and are particularly concerned about type-I error inflation in very sparse discordant data. This is the traditional choice when the discordant count is small, especially if one discordant cell is tiny or zero. [[par.nsf.gov]](https://par.nsf.gov/servlets/purl/10520593), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**Its main drawback:** it is often **too conservative**. Fagerland et al. showed that the exact conditional test produced unnecessarily large p-values and poor power compared with mid-ppp, asymptotic, and exact unconditional approaches. Pembury Smith and Ruxton summarize the same point and note that older advice recommending the exact test for b+c\<25b+c\<25b+c\<25 has been challenged by newer simulation work. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**For multiple treatment-vs-control comparisons:** this conservatism is a major disadvantage. If you run several treatment-vs-control McNemar tests and then apply FWER/FDR control, the exact conditional p-values can become so conservative that true effects are easily missed. Its only real advantage is if you need a very cautious, exact-style single-comparison test because of regulatory or other high-stakes reasons. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[cran.r-project.org]](https://cran.r-project.org/web/packages/DiagrammeR/DiagrammeR.pdf), [[towardsdat...cience.com]](https://towardsdatascience.com/how-to-plot-graphs-using-the-diagrammer-package-in-r-3fe4642091cc/)
+
+**Bottom line:** valid and cautious, but usually not the best practical choice if power matters. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**mid-P**
+
+The mid-p McNemar test is **not** an exact p-value in the strict super-uniform sense. Fagerland et al. explicitly note that the mid-p approach does **not guarantee preservation of the significance level**, even though in their extensive simulations it behaved very well and did not violate the nominal level in the scenarios they examined. That means **Holm on mid-p values does not carry a formal exact FWER guarantee**, even though it may perform well empirically. [[link.springer.com]](https://link.springer.com/article/10.1186/1471-2288-13-91), [[researchgate.net]](https://www.researchgate.net/profile/Morten-Fagerland/publication/255934166_FagerlandLydersenLaake2013---Supplementary/data/00463520e04b03f292000000/FagerlandLydersenLaake2013---McNemar---Supplementary.pdf?origin=publication_list)
+
+The mid-ppp McNemar test is obtained from the exact conditional test by subtracting half the probability of the observed discordant outcome before doubling the one-sided tail, producing a p-value that is less conservative than the ordinary exact conditional version. Fagerland et al. studied this in detail and found that it struck a very attractive balance between exact-style calibration and practical power. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**When to use it:** if discordant counts are **small to moderate**, the mid-ppp method is often the best practical choice. Fagerland et al. concluded that it was an excellent alternative to the exact unconditional test, almost as powerful as the plain asymptotic test, and much better than the exact conditional and continuity-corrected methods. Pembury Smith and Ruxton go further and say that the mid-ppp version can be recommended for **routine use**. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**For multiple treatment-vs-control comparisons:** this is often the most attractive method of the five. The reason is simple: in many-to-one McNemar comparisons, you already lose power because you are adjusting for multiplicity and because the shared control induces dependence among tests. Starting from a less conservative but still well-behaved single-comparison p-value helps preserve findings. Mid-ppp is therefore often the best base test if you intend to apply BH/BY or other multiplicity control later. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[quarto-web...fessor.com]](https://quarto-webr.thecoatlessprofessor.com/qwebr-internal-cell.html), [[github.com]](https://github.com/rich-iannone/DiagrammeR/blob/main/vignettes/graphviz-mermaid.Rmd), [[cran.r-project.org]](https://cran.r-project.org/web/packages/DiagrammeR/DiagrammeR.pdf)
+
+**Caveat:** unlike the exact conditional test, the mid-ppp version does not come with a strict finite-sample proof that the type-I error will never exceed nominal in every possible scenario, although in the extensive scenarios studied by Fagerland et al. it did not exceed nominal. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**Bottom line:** for most applied multiple McNemar settings, especially with sparse discordants, **mid-**ppp is usually the best practical default. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498), [[github.com]](https://github.com/PHUoL/pairwisemcnemar)
+
+**Exact unconditional**
+
+The exact unconditional McNemar test is more elaborate than the exact conditional test because it does **not** throw away the concordant pairs. Instead, it considers all possible 2×2 tables with NNN matched pairs and eliminates the nuisance parameter by maximizing over it. Fagerland et al. describe it as a more powerful exact approach, but computationally more complex. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**When to use it:** use it when you want the strongest exact-style performance and can tolerate the extra computational complexity. In Fagerland et al.’s evaluation it was essentially the best benchmark among the exact-style tests, with type-I error close to nominal and power far better than the exact conditional test. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**For multiple treatment-vs-control comparisons:** it has one real advantage over exact conditional testing—better calibration and power—and one modest conceptual advantage over conditional methods in that it uses information from the concordant pairs as well. That said, the gain over mid-ppp was often small, while the complexity is higher, so in practice the choice is often **mid-**ppp vs exact unconditional, not exact conditional vs exact unconditional. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**Bottom line:** the best “purist” exact option, but often not worth the extra complexity if mid-ppp is available. [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
+
+**Exact unconditional**
+
+For exact unconditional McNemar methods, Berger and Sidik’s 2003 paper is relevant because it was specifically about **exact unconditional tests for matched pairs**, and they report that properly constructed unconditional exact methods can achieve **correct size**, whereas the asymptotic McNemar test may not. So **if** the unconditional p-values returned by your chosen implementation are true exact / conservative p-values, then Holm is again valid under arbitrary dependence across the family. The caveat is that the exactness claim attaches to the **specific unconditional p-value construction**, not to the word “unconditional” in the abstract. In practice, this is a much stronger case than asymptotic or mid-p, but less transparent than exact conditional. [[paperzz.com]](https://paperzz.com/doc/8453011/exact-unconditional-tests-for-a-2-x-2-matched), [[asu.elsevierpure.com]](https://asu.elsevierpure.com/en/publications/exact-unconditional-tests-for-a-2-2-matched-pairs-design/), [[db.cngb.org]](https://db.cngb.org/data_resources/literature/20345498)
 
 ### Interpreting the McNemar Z statistic across methods
 
-In `mcnemar_control()`, the reported McNemar statistic `Z` comes from the underlying
-**contingencytables** functions. For `method = "asymptotic"`, `Z` is signed and can be
-negative or positive because it is computed from the difference of discordant counts
-(e.g., proportional to \(b - c\)). For `method = "cc"`, the continuity-corrected statistic
-uses \(|b - c|\) (so the returned `Z` is non-negative) and should be interpreted as a
-magnitude-only statistic. In both cases, the default p-value is two-sided and is computed
-from \(|Z|\), so the sign does not affect the p-value.
+In `mcnemar_control()`, the reported McNemar statistic `Z` comes from the underlying **contingencytables** functions. For `method = "asymptotic"`, `Z` is signed and can be negative or positive because it is computed from the difference of discordant counts (e.g., proportional to $b - c$). For `method = "cc"`, the continuity-corrected statistic uses $|b - c|$ (so the returned `Z` is non-negative) and should be interpreted as a magnitude-only statistic. In both cases, the default p-value is two-sided and is computed from $|Z|$, so the sign does not affect the p-value.
 
 ```{r}
 library(mcnemarControl)
@@ -34,3 +318,91 @@ mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatmen
 mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, method = "cc")
 mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, method = "midp")
 ```
+
+# Selecting a p-value adjustment
+
+When `mcnemar_control()` performs several control-versus-treatment comparisons, the resulting p-values form a multiple-testing family and should usually be adjusted for multiplicity. The function offers several p-value adjustment strategies, but they are not interchangeable, as they target different error rates, require different dependence assumptions, and are more or less appropriate depending on whether the analysis is **confirmatory** or **exploratory**, and whether the raw McNemar p-values are **exact/discrete** or **approximate**.
+
+Four methods from the [p.adjust](https://rdrr.io/r/stats/p.adjust.html) function from `stats` is included with one other using the discrete Holm procedure by @westfall2010. These methods can be divided into two families. The first is the **Holm**, **discrete-Holm**, and **Hochberg** methods for controlling the **family-wise error rate (FWER)**—the probability of making **at least one false rejection** in the comparison family. The other is the **BH** (Benjamini–Hochberg) and **BY** (Benjamini–Yekutieli) methods to control the **false discovery rate (FDR)**—the expected proportion of false positives among the rejected hypotheses. Because **FDR** is a weaker criterion than **FWER**, BH and BY usually give more rejections than Holm-like methods, but they answer a different inferential question.
+
+## Holm
+
+When `p_adjust = "holm"` is chosen, the standard Holm (Bonferroni–Holm) step-down procedure is used which orders the observed p-values from smallest to largest and applies the sequential Bonferroni logic described by @holm1979. The method generally provides strong family-wise error-rate (FWER) control under **arbitrary dependence assumptions** (see [p.adjust](https://rdrr.io/r/stats/p.adjust.html)) and is one of the standard multiplicity adjustments documented in `stats::p.adjust()`.
+
+`p_adjust = "holm"` is the default method, as it can be used with all of the five McNemar methods in this package. The assumption makes it especially attractive when the multiple treatment-versus-control comparisons are correlated because they reuse the same subjects and the same control condition. The R documentation for the [p.adjust](https://rdrr.io/r/stats/p.adjust.html) function explains that there is usually no reason to prefer unmodified Bonferroni over Holm, which is why it was not included.
+
+For `mcnemar_control()`, the robustness of the Holm method matters because a many-to-one paired design naturally induces dependence among the comparison p-values. Users often cannot justify an independence assumption, especially in repeated-measures or matched-subject settings. Holm therefore serves as the safest generic FWER option when the raw McNemar p-values are themselves valid null p-values.
+
+Choose Holm, if:
+
+- you are interested in a **confirmatory** test where each treatment-versus-control comparison may support a substantive claim;
+
+- dependence across comparisons is present or unclear, and you want a standard method valid under **arbitrary dependence;**
+
+- you want the safest default FWER procedure.
+
+## Discrete Holm
+
+`p_adjust = "discrete_holm"` is included because exact conditional McNemar p-values are **discrete**, not continuous. The implementation is based on the method described by @westfall2010 that showed that multiplicity procedures for multiple McNemar tests can be improved by exploiting the **exact null distributions** of the individual tests rather than treating the observed p-values as generic continuous-style inputs. Their paper develops a McNemar-specific exact/discrete Bonferroni–Holm framework with strong FWER control under **minimal assumptions** and a closed-form algorithm, precisely to take advantage of the exact conditional Binomial structure of McNemar’s test.
+
+That is why `discrete_holm` is offered only when `method = "exact_cond"`. In that setting, each comparison has a known exact conditional null distribution determined by the number of discordant pairs, and the attainable p-value support can be used directly in the step-down adjustment. This is the most McNemar-specific confirmatory multiplicity option in the function and is especially attractive when discordant counts are small and ordinary Holm may be unnecessarily conservative.
+
+Choose Discrete Holm, if:
+
+- you want to use an adjustment designed specifically for the Exact conditional McNemar test;
+
+- discordant counts are small and exact conditional McNemar p-values are highly discrete;
+
+- the goal is **confirmatory FWER control**, but you want an adjustment tailored to the exact McNemar null distributions rather than a generic continuous-style correction.
+
+## Hochberg
+
+`p_adjust = "hochberg"` is a less conservative **FWER** alternative to Holm when stronger dependence assumptions are acceptable. R documentation for the [p.adjust](https://rdrr.io/r/stats/p.adjust.html) function explains that the **Hochberg** method is valid when the hypothesis tests are **independent or non-negatively associated**, whereas Holm remains valid under arbitrary assumptions. In practice, this means the **Hochberg** method may be useful when the user believes the family of McNemar p-values behaves in a positively associated way and wants a somewhat more powerful FWER procedure than Holm. However, in many repeated-measures control-versus-treatment McNemar settings, dependence is present but difficult to characterize formally, so Holm remains the safer default. Hochberg is therefore an optional, not primary, FWER choice.
+
+Choose Hochberg, if:
+
+- you still want **FWER** control, but are willing to assume **independence or non-negative association** of the comparison p-values;
+
+- you want a method that is often slightly more powerful than Holm under those assumptions;
+
+- the dependence structure is believed to be benign enough that Holm’s extra robustness is not essential.
+
+## Benjamini & Hochberg
+
+`p_adjust = "BH"` is included because not all analyses using `mcnemar_control()` are strictly confirmatory. In some applications, the goal is to **screen**, **rank**, or **prioritize** treatments that differ from control rather than to guarantee that the probability of any false family claim remains below a pre-specified level. In these exploratory studies, controlling the **false discovery rate (FDR)** can be a more appropriate objective than controlling the family-wise error rate. R documentation for the [p.adjust](https://rdrr.io/r/stats/p.adjust.html) function indicates the BH method as an FDR-controlling method.
+
+@benjamini1995 has shown that the original BH procedure is valid not only under independence but also under a broad class of **positive dependence** conditions that include comparisons of many treatments with a single control. That makes BH a sensible exploratory option in `mcnemar_control()`, especially when users expect several treatment effects and are willing to tolerate some false discoveries in exchange for more power. However, it should not be confused with an FWER method, as it does not answer the same confirmatory question as the Holm or discrete-Holm methods.
+
+Choose Benjamini & Hochberg, if:
+
+- the analysis is **exploratory**, screening-oriented, or you prioritizes **discoveries** over strict family protection;
+
+- you want to control the **expected proportion** of false discoveries rather than the chance of **any** false discovery;
+
+- assuming a positive-dependence structure is plausible, which can often be reasonable in many-to-one comparisons sharing one control.
+
+## Benjamini & Yekutieli
+
+`p_adjust = "BY"` is included because some users may want to control **FDR** instead of **FWER**, but do **not** want to rely on positive-dependence assumptions of the BH method. @benjamini2001 showed that BY provides a more conservative modification than BH that controls FDR under **general dependence**. It can be seen as a “safe FDR” option when the user wants exploratory error control under potentially complicated dependence and does not want to assume that BH’s positive-dependence setting applies.
+
+Choose Benjamini & Yekutieli, if:
+
+- the analysis is **exploratory**, but the dependence among the McNemar comparison p-values is too complicated or uncertain for ordinary BH;
+
+- you want an FDR method with a formal guarantee under **arbitrary dependence**;
+
+- you are willing to accept substantial conservatism to obtain that guarantee.Holm versus discrete Holm for exact conditional McNemar tests
+
+In this package, `p_adjust = "holm"` and `p_adjust = "discrete_holm"` represent two different multiple-testing strategies, even when both are used with the exact McNemar tests. The distinction is important because the two procedures answer the same multiplicity problem with different levels of information.
+
+### Reproducible example
+
+The example below compares `method = "exact_cond"` with the standard Holm correction and the discrete Holm correction. The code assumes that your implementation of `mcnemar_control()` includes `p_adjust = "discrete_holm"` and restricts it to `method = "exact_cond"`.
+
+\`\`\`{r} #\| label: setup-mcnemar-control-holm #\| message: false #\| warning: false
+
+library(mcnemarControl) library(dplyr)
+
+# Example long-format paired binary dataset
+
+dat \<- mcnemar_example_long(n = 60, seed = 42) \`\`

@@ -1,21 +1,292 @@
 ---
-title: "Effect size for paired binary outcomes: Cohen's g"
+title: "Effect size estimation"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Effect size for paired binary outcomes: Cohen's g}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+bibliography: bibliography.bib  
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-```{r}
-library(mcnemarControl)
+# Overview
 
-dat <- mcnemar_example_long(seed = 3)
-trts <- c("TrtA", "TrtB", "TrtC")
-fit <- mcnemar_control(dat, "id", "condition", "outcome", control = "Control", treatments = trts, ci = 0.95)
-summary(fit)
+The main purpose for using `mcnemar_table()` is to provide the user with the ability to calculate an effect size for each comparison of a treatment a control. Cohen's *g* is used for effect size [@cohen2013] and has been used in several studies with the McNemar test [@macdonald2022; @he2023; @goto2023; @kloosterman2024; @langer2024; @binkowska2026]. `mcnemar_table()` should be used only after using `mcnemar_control()`. In the example below, we fit the asymptotic McNemar test to our example `dat`, which has a control and three treatments.
+
+```{r}
+# load package
+library(mcnemarControl)
+# example data
+dat <- mcnemar_example_long(seed=2)
+# The asymptotic McNemar test with default p-value adjust using the Holm method 
+dat.asymp <- mcnemar_control(dat, id = "id", condition = "condition", outcome = "outcome",
+                               control = "Control", method="asymptotic",p_adjust="holm", ci=0.95)
 ```
+
+## Cohen's *g*
+
+Cohen's *g* has been used as an effect size with the McNemar test. It was designed to test if there was a significant departure of a population proportion from 0.5 and has been suggest as an effect size for the sign test [@cohen1992]. The sign test (look Siegal for definition.is similar to the McNemar test.
+
+$$
+g = P -0.5
+$$
+
+For the McNemar test, Cohen's *g* is a measure of the degree of asymmetry for the discordant pairs from a $2 \times 2$ contingency table, where
+
+$$
+g = {\frac{b}{b+c}} -0.5
+$$
+
+When the option `include_g = TRUE` is included in `mcnemar_table()`, the function calls [cohens_g](https://easystats.github.io/effectsize/reference/cohens_g.html) function from the **effectsize** package.
+
+```{r}
+dat.cohens_g.marginal <- mcnemar_table(dat.asymp, data=dat,include_g = TRUE)
+dat.cohens_g.marginal
+```
+
+The output from `mcnemar_control()` shows a table with a row for each treatment comparisons with the control. The cells from the $2 \times 2$ contingency is presented by four columns, with the discordant cells represented by columns `b` and `c`, and the concordant cells by `a` and `d`. Finally, column cohens_g shows Cohen's *g* that was estimated from the [cohens_g](https://easystats.github.io/effectsize/reference/cohens_g.html) function. No confidence intervals are shown, as the `methodCI = "none"`which is the default has been used here. `mcnemar_control()` includes a marginal and two methods for adjusting the estimates for the confidence intervals to account for multiple McNemar test comparisons.
+
+### Marginal confidence intervals {#sec-marginalCI}
+
+When `method="marginal"` is included with or without `ci_level = 0.95`, 95% confidence intervals are included in the output table. The marginal confidence intervals are **single-compariso**n $\text{CI}$ from the [cohens_g](https://easystats.github.io/effectsize/reference/cohens_g.html) function that were suppressed with `methodCI = "none"`.
+
+```{r}
+dat.cohens_g.marginal <- mcnemar_table(dat.asymp, data=dat,include_g = TRUE,method="marginal", ci_level = 0.95)
+dat.cohens_g.marginal
+
+```
+
+### Simultaneous max-\|t\| confidence intervals {#sec-simultaneousCI}
+
+The `method="simultaneous"` provides the user with simultaneous confidence intervals for Cohen’s $g$ were obtained using a **subject-level bootstrap max-\|*t*\|** procedure, where bootstrap replicates of the vector of treatment-specific $g$ estimates are studentized, the maximum absolute studentized deviation over treatments are recorded in each replicate, and the resulting bootstrap distribution is used to derive a **single-step family-wise critical value** for simultaneous confidence intervals.This procedure is analogous to other bootstrap max-*t* simultaneous-inference methods [@kuchibhotla2022], such as the [simultaneous_ci](https://rdrr.io/cran/PosiR/man/simultaneous_ci.html) function in the **PosiR** package[@Chukwuma2025], but is specialized to paired binary McNemar-type effect sizes rather than regression coefficients across a model universe. It consists of the following steps:
+
+1.  Re-sample subjects with replacement;
+
+2.  Recompute the full vector of treatment-specific estimates for Cohen's *g*;
+
+3.  Studentize the bootstrap deviations;
+
+4.  Take the **maximum absolute studentized deviation** across the treatment family in each bootstrap replicate;
+
+5.  Use the bootstrap distribution of that maximum to get one common critical value,
+
+6.  Build simultaneous intervals for every treatment using that family-wise critical value.
+
+```{r}
+dat.cohens_g.simultaneous <- mcnemar_table(dat.asymp, data=dat,include_g = TRUE,method="simultaneous", ci_level = 0.95)
+dat.cohens_g.simultaneous
+```
+
+#### Step-by-step procedure for simultaneous max-\|t\| confidence intervals on g scale {#sec-maxTg}
+
+The procedure can be summarised as follows:
+
+1.  Reconstruct subject-level wide data
+
+    The function starts with the original long-format repeated data and reshapes them into **one row per subject**, with one column for the control outcome and one column for each treatment outcome. It keeps only complete subject profiles for the simultaneous calculation.
+
+2.  Recode outcomes to binary values
+
+    Using `outcome_levels`, outcomes are recoded so that the **second level** is treated as success (`1`) and the first as failure (`0`). This binary representation is allows the discordant counts $b$ and $c$ to be reconstructed in each comparison and in each bootstrap sample.
+
+3.  Compute the original vector of Cohen's *g* estimates
+
+    For each treatment $j$, the code compares treatment with control on the same subjects and computes
+
+    $$
+    \hat{g} = \frac{b_{j}}{b_{j}+c_{j}}-0.5
+    $$
+
+    when $b_{j}+c_{j}>0$; otherwise it returns $\text{NA}$. These original values form the vector of observed effect sizes across the treatment family.
+
+4.  Bootstrap the subjects
+
+    The code then re-samples the subjects with replacement $R$ times, carrying along each subject’s full repeated outcome profile across control and all treatments. This preserves the correlation across treatment-vs-control comparisons in the re-sampled data.
+
+5.  Recompute the vector of Cohen's *g* values in each bootstrap sample
+
+    For each bootstrap replicate, the statistic function recomputes the entire treatment-specific vector
+
+    $$
+    \hat{g}_{1}^*,
+    \hat{g}_{2}^*,...
+    \hat{g}_{K}^*
+    $$
+
+    These bootstrap vectors are stored in the bootstrap matrix `Tmat`.
+
+6.  Estimate a bootstrap standard error for each treatment effect
+
+    From the bootstrap matrix, the code computes the bootstrap standard deviation ($\text{sd}$) for each treatment-specific Cohen's g value:
+
+    $$
+    \hat{\text{SE}} = \text{sd}(\hat{g}_{j}^{*(1)},...\hat{g}_{j}^{*(R)})
+    $$
+
+    These treatment-specific standard errors ($\text{SE}$s) are then used to studentize the bootstrap deviations.
+
+7.  Keep only usable comparisons / replicates
+
+    The code identifies which treatment comparisons have finite original estimates and positive finite bootstrap $\text{SE}$s. It also identifies which bootstrap rows have all required entries finite for the family-wise calibration. Treatments with zero or undefined $\text{SE}$s are flagged as **degenerate** and users are advised to use the marginal $\text{CI}$s.
+
+8.  Form studentized bootstrap deviations
+
+    For each usable treatment $j$ and each usable bootstrap replicate $r$, the code computes the standardized deviation
+
+    $$
+    Z_{j}^{*(r)} = \frac{\hat{g_{j}}^{*(r)}-\hat{g_{j}}}{\hat{\text{SE}_{j}}}
+    $$
+
+    This is the "*t*" part of the max*-t* method with each treatment’s bootstrap fluctuation measured with its own standard-error units.
+
+9.  Compute the $\text{max}-|t|$ statistic for each bootstrap replicate
+
+    For each bootstrap replicate replicate $r$, the method takes the **largest absolute** standardized deviation across the treatment family:
+
+    $$
+    M^{*(r)}= \max_{j} |Z_{j}^{*(r)}|
+    $$
+
+    This is the family-wise reference statistic. It captures the worst standardized error anywhere in the treatment family for that bootstrap sample.
+
+10. Extract the simultaneous critical value
+
+    The code then takes the empirical $(1-\alpha)-$quantile of the bootstrap `maxabs` values to get the simultaneous critical value $c_{\alpha}$, which is used for every treatment-specific interval.
+
+11. Build the simultaneous $\text{max}-|t|$ confidence intervals
+
+    Finally, for each treatment $j$, the code constructs the interval
+
+    $$
+    \hat{g_{j}}\pm c_{\alpha}\hat{\text{SE}_j}
+    $$
+
+    These are returned as `ci_low` and `ci_high` for the simultaneous max-*t* $\text{CI}$s.
+
+12. Flag degenerate comparisons
+
+    If a comparison has no discordant pairs, or if its bootstrap $\text{SE}$ is zero / non-finite, the method flags it as **degenerate** and the interval is not treated as a regular simultaneous $\text{CI}$. A degeneracy **flag** is explicitly stored for later uses and marginal intervals are recommended instead.
+
+#### Simultaneous max-\|t\| logit confidence intervals {#sec-maxTlogit}
+
+One of the disadvantages of calculating the confidence interval directly on from Cohen's *g* is that the simultaneous confidence intervals can have estimated values above the range limit of $[-0.5, 0.5]$.
+
+In order to obtained confidence interval estimates within the limits, we can use `methodCI = "simultaneous_logit"` that then allows `mcnemar_table()` to compute the observed discordant-pair proportion $p = b/(b+c)$ for each treatment, transforms it to $\eta = \text{logit}()p$, then bootstraps subjects to obtain a family of bootstrap $\eta^{*}$ values, forms the maximum absolute standardized deviation over treatments in each bootstrap replicate, and uses the $(1-\alpha)-$quantile of that $\text{max}-|t|$ distribution as a simultaneous critical value, and then back-transforms the resulting logit-scale limits to $g = p-0.5$. The resulting interval endpoints are therefore naturally bounded within $[−0.5,0.5]$ whenever defined.
+
+```{r}
+dat.cohens_g.simultaneous_logit <- mcnemar_table(dat.asymp, data=dat,include_g = TRUE,method="simultaneous_logit", ci_level = 0.95)
+dat.cohens_g.simultaneous_logit
+```
+
+#### Step by step procedure for simultaneous max-\|t\| confidence intervals on logit scale
+
+The first two steps are the same as for the procedure on the original *g* scale @sec-maxTg. The procedure then continues from:
+
+3.  Compute the proportion *p* of observed discordant-pairs
+
+    For each treatment $j$,
+
+    $$
+    \hat{p_{j}}= \frac{b+{j}}{b_{j}+c_{j}}
+    $$
+
+    whereby $b_{j}$ is the number of subjects where the control $=1$ and treatment $= 0$, and $c_{j}$ is the number of subjects where the control $=0$ and treatment $= 1$ and provided $b_{j}+ c_{j} \gt 0$. If there are no discordant pairs, the estimate is treated as undefined ($\text{NA}$).
+
+4.  Transform $p$ to the logit scale
+
+    For each treatment,
+
+    $$
+    \hat{\eta_{j}}= \text{logit}(\hat{p_{j}}) = \log \bigg(\frac{\hat{p_{j}}}{1-\hat{p_{j}}}\bigg)
+    $$
+
+    but only when $0 \lt \hat{p_{j}} \lt 1$. $\hat{p_j}$. if $\hat{p_j} = 1$, $\hat{p_j} = 0$ or are undefined, they are marked as **degenerate on the observed scale** and excluded from the $\text{max}-|t|$ calibration.
+
+5.  Generate bootstrap replicates on the logit scale
+
+    The function then defines a bootstrap statistic that, for each subject-level bootstrap sample:
+
+    1.  reconstructs the treatment-versus-control discordant counts $b_{j}$ and $c_{j}$
+
+    2.  computes
+
+        $$
+        p_{j}^{*} = \frac{b_{j}^{*}}{b_{j}^{*}+c_{j}^{*}}
+        $$
+
+        provided there are discordant pairs,
+
+    3.  then transforms to
+
+        $$
+        \eta_{j}^{*} = \log{\frac{p_{j}^{*}}{1-p_{j}^{*}}}
+        $$
+
+        only if $0 \lt p_{j}^{*} \lt 1$. Otherwise $\text{NA}$. This is done using the `boot::boot()` function on the **subject rows** of the wide repeated-measures dataset. This is importan as it preserves the dependence structure across all treatment-versus-control comparisons because each bootstrap replicate carries the **full repeated outcome profile** of each resampled subject. This is what makes the intervals simultaneous at the **family level** across treatments.
+
+6.  Estimate bootstrap standard errors on the logit scale
+
+    From the matrix of bootstrap logit estimates, the function computes a treatment-specific bootstrap standard deviation:
+
+    $$
+    \hat{\text{SE}_{n,j}}= \text{sd}(\eta_{j}^{*})
+    $$
+
+    using a finite bootstrap replicates only. Treatments are considered usable and are retained for $\text{max}-|t|$ calibration only if:
+
+    -   the observed treatment $\eta_{j}^{*}$ is **not degenerate**,
+
+    -   the bootstrap $\hat{\text{SE}_{n,j}}$ is finite,
+
+    -   and the bootstrap $\hat{\text{SE}_{n,j}} > 0$.
+
+7.  Build the $\text{max}-|t|$ bootstrap statistics
+
+    For each bootstrap replicate and each usable treatment, the function computes the standardized deviation:
+
+    $$
+    Z_{j}^{*} = \frac{\eta_{j}^{*}-\hat{\eta_{j}}}{\hat{\text{SE}_{n,j}}}
+    $$
+
+    Then, for each replicate, it computes the familywise maximum statistic:
+
+    $$
+    M^{*(r)}= \max_{j} |Z_{j}^{*(r)}|
+    $$
+
+8.  Extract the simultaneous critical values
+
+    The code then takes the empirical $(1-\alpha)-$quantile of the bootstrap `maxabs` values to get the simultaneous critical value $c_{\alpha}$, which is used for every treatment-specific interval.
+
+9.  Construct simultaneous intervals on the logit scale
+
+    For each usable treatment, the function determines simultaneous confidence limits on the transformed scale:
+
+    $$
+    \hat{\eta_{j}}\pm c_{\alpha}\hat{\text{SE}_{n,j}}
+    $$
+
+10. Back-transform to the *g*-scale
+
+    The transformed limits are back-converted to the probability scale:
+
+    $p_{L,j} = \text{logit}^{-1}(\eta_{L,j})$ and $p_{U,j} = \text{logit}^{-1}(\eta_{U,j})$
+
+    and then shifted back to Cohen’s *g*:
+
+    $g_{L,j}= p_{L,j}-0.5$ and $g_{U,j}= p_{U,j}-0.5$
+
+    So instead of smoothing or extrapolating beyond the boundary $[-0.5,0.5]$, the interval is **collapsed to the natural endpoint**. This is especially useful as the intervals respects the logical parameter range. i.e. Th confidence interval will be within $0.5$ at the upper limit.
+
+11. Flag degenerate treatments
+
+    Finally, the method marks treatments as degenerate if they were boundary/no-discordant cases or if their bootstrap $\text{SE}$ on the logit scale is zero or non-finite. These flags are returned in the output so downstream print / summary methods can recommend marginal intervals when appropriate.
+
+## Difference
+
+d
+
+# References {#sec-ref_effectsize}

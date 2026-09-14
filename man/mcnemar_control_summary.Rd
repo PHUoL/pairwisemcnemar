@@ -2,20 +2,203 @@
 % Please edit documentation in R/mcnemar_control.R
 \name{mcnemar_control_summary}
 \alias{mcnemar_control_summary}
-\title{Summary table for \code{mcnemar_control()} results}
+\alias{summary.mcnemarControl}
+\alias{print.summary.mcnemarControl}
+\title{Summary for \code{mcnemar_control()} results}
 \usage{
-mcnemar_control_summary(x, digits = 4, ...)
+mcnemar_control_summary(
+  x,
+  alpha = 0.05,
+  sort_by = c("p_adjusted", "p_value"),
+  digits = 4,
+  low_discordant_threshold = 10,
+  ...
+)
+
+\method{summary}{mcnemarControl}(
+  object,
+  alpha = 0.05,
+  sort_by = c("p_adjusted", "p_value"),
+  digits = 4,
+  low_discordant_threshold = 10,
+  ...
+)
+
+\method{print}{summary.mcnemarControl}(x, digits = 4, alpha = NULL, color = interactive(), ...)
 }
 \arguments{
-\item{x}{An object returned by \code{mcnemar_control()}.}
+\item{x}{An object returned by \code{\link{mcnemar_control}()}.}
 
-\item{digits}{Digits for rounding numeric columns.}
+\item{alpha}{Significance threshold used for summary counts and treatment
+listings. Default is \code{0.05}.}
 
-\item{...}{Unused.}
+\item{sort_by}{Which column to use when ordering comparisons:
+\code{"p_adjusted"} (default) or \code{"p_value"}.}
+
+\item{digits}{Number of digits used for display formatting of p-value columns
+in the ordered-comparisons tibble. Default is \code{4}.}
+
+\item{low_discordant_threshold}{Integer threshold used for descriptive
+summary diagnostics. Comparisons with discordant count \code{b + c} below
+this value are counted as having low discordance. Default is \code{10}.}
+
+\item{...}{Additional arguments passed through to the summary constructor or
+ignored by the print method.}
+
+\item{object}{An object returned by \code{\link{mcnemar_control}()}.}
+
+\item{color}{Logical; if \code{TRUE} (default in interactive sessions),
+significant values in the \code{p_value} and \code{p_adjusted} columns of
+the ordered-comparisons tibble are displayed in red when ANSI color output
+appears to be supported. If \code{FALSE}, the tibble is printed without
+color highlighting.}
 }
 \value{
-A tibble summarising each treatment vs control comparison.
+\code{mcnemar_control_summary()} and \code{summary.mcnemarControl()} return
+an object of class \code{"summary.mcnemarControl"} containing:
+\itemize{
+\item \code{overview}: a list with analysis-level counts, including
+control label, method, p-value adjustment method, confidence level stored
+in the fit, number of comparisons, number of valid p-values, number of
+zero-discordant comparisons, and counts of significant raw and adjusted
+comparisons.
+\item \code{significant_raw}: character vector of treatment labels with
+raw p-values below \code{alpha}.
+\item \code{significant_adjusted}: character vector of treatment labels
+with adjusted p-values below \code{alpha}.
+\item \code{discordant}: a list summarizing the discordant counts across
+comparisons (minimum, quartiles, median, mean, maximum, and the number of
+comparisons below \code{low_discordant_threshold}).
+\item \code{ordered}: a data frame of all control-versus-treatment
+comparisons ordered by \code{sort_by}.
+\item \code{notes}: character vector of method- or data-specific summary
+notes.
+\item \code{next_step}: a character string suggesting a reporting workflow
+using \code{\link{mcnemar_table}()} with one of the supported CI modes
+(\code{"marginal"}, \code{"simultaneous"}, or
+\code{"simultaneous_logit"}).
+\item \code{results}: the original comparison-level results table from the
+\code{"mcnemarControl"} object.
+}
+
+\code{print.summary.mcnemarControl()} prints the summary object in a
+human-readable report format and returns the object invisibly.
 }
 \description{
-Summary table for \code{mcnemar_control()} results
+Produces an aggregated summary of an object returned by
+\code{\link{mcnemar_control}()}. The summary is intended to complement the
+comparison-level output printed by \code{print.mcnemarControl()} by providing
+a higher-level overview of the analysis.
+}
+\details{
+\code{mcnemar_control_summary()} summarizes the family of pairwise
+control-versus-treatment McNemar comparisons stored in a
+\code{"mcnemarControl"} object. In contrast to \code{print(fit)}, which
+displays the comparison-level results table, \code{summary(fit)} returns a
+structured object of class \code{"summary.mcnemarControl"} containing:
+
+\itemize{
+\item an aggregated \strong{overview} of the analysis,
+\item the treatments significant at the raw and adjusted levels,
+\item \strong{discordant-pair diagnostics},
+\item \strong{ordered comparisons} ranked by adjusted p-value by default,
+\item method-specific \strong{notes},
+\item and a suggested \strong{next step} pointing to
+\code{\link{mcnemar_table}} with one of the currently supported CI modes
+(\code{"marginal"}, \code{"simultaneous"}, or
+\code{"simultaneous_logit"}) for inspection of cell counts, Cohen's
+\eqn{g}, and confidence intervals.
+}
+
+By default, the ordered comparisons are sorted with the \strong{lowest
+adjusted p-value first}, because this places the strongest pairwise evidence
+against the control at the top of the summary output. The ordering can be
+changed to use raw p-values instead via \code{sort_by = "p_value"}.
+
+The discordant diagnostics are descriptive only. The
+\code{low_discordant_threshold} argument is used to count how many
+control-versus-treatment comparisons have relatively few discordant pairs
+(\code{b + c}). This threshold is a heuristic summary aid and should not be
+interpreted as a formal rule for selecting one McNemar test variant over
+another.
+
+Like \code{\link{mcnemar_control}()} itself, this summary is based on
+\strong{pairwise matched marginal comparisons}. It does not explicitly model
+repeated-measures features such as period effects, treatment order, sequence,
+or carryover. In repeated-measures studies with fixed condition order, the
+summary should therefore be interpreted as describing pairwise matched
+differences under the observed design rather than treatment effects fully
+separated from order or carryover effects.
+
+The recommended downstream workflow no longer uses combined CI modes;
+instead, users should select one of the supported \code{\link{mcnemar_table}()}
+CI methods according to whether pointwise or multiplicity-adjusted
+intervals are desired.
+
+The \code{print.summary.mcnemarControl()} method prints the aggregated summary
+returned by \code{summary(fit)} or \code{mcnemar_control_summary(fit)}. It
+includes the overview section, lists of significant treatments, discordant
+diagnostics, ordered comparisons, method-specific notes, and the recommended
+next step.
+
+For the ordered-comparisons tibble, significant values in the columns
+\code{p_value} and \code{p_adjusted} can optionally be highlighted in red.
+}
+\examples{
+dat <- mcnemar_example_long(seed = 1)
+
+fit <- mcnemar_control(
+  dat,
+  id = "id",
+  condition = "condition",
+  outcome = "outcome",
+  control = "Control"
+)
+
+# Construct summary object
+s <- summary(fit)
+
+# Print aggregated summary
+s
+
+# Order comparisons by raw p-value instead of adjusted p-value
+summary(fit, sort_by = "p_value")
+
+# Inspect cell counts, Cohen's g, and marginal confidence intervals
+tab_marg <- mcnemar_table(
+  fit,
+  dat,
+  methodCI = "marginal"
+)
+
+# Inspect cell counts, Cohen's g, and simultaneous adjusted confidence
+# intervals on the raw g-scale
+tab_sim <- mcnemar_table(
+  fit,
+  dat,
+  methodCI = "simultaneous",
+  R = 1000,
+  seed = 1
+)
+
+# Inspect cell counts, Cohen's g, and simultaneous adjusted confidence
+# intervals based on the logit scale
+tab_logit <- mcnemar_table(
+  fit,
+  dat,
+  methodCI = "simultaneous_logit",
+  R = 1000,
+  seed = 1
+)
+
+}
+\seealso{
+\itemize{
+\item \code{\link{mcnemar_control}()} for the comparison-level matched test
+workflow against a control condition.
+\item \code{\link{mcnemar_table}()} for matched 2x2 cell counts, Cohen's g,
+marginal confidence intervals, and simultaneous adjusted confidence
+intervals corresponding to the pairwise control-versus-treatment
+comparisons.
+}
 }

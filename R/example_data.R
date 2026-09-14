@@ -15,7 +15,7 @@ mcnemar_example_long <- function(n = 40, seed = 1) {
   conditions <- c("Control", "TrtA", "TrtB", "TrtC")
 
   base_p <- stats::plogis(stats::rnorm(n, 0, 0.7))
-  shifts <- c(Control = 0, TrtA = 0.30, TrtB = 0.10, TrtC = -0.05)
+  shifts <- c(Control = 0, TrtA = 0.20, TrtB = 0.30, TrtC = 0.20)
 
   out <- lapply(conditions, function(cc) {
     p <- pmin(pmax(base_p + shifts[[cc]], 0.02), 0.98)
